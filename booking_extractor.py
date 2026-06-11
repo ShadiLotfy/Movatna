@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -24,6 +25,8 @@ from typing import Iterable, Sequence
 
 from pypdf import PdfReader
 
+
+logger = logging.getLogger(__name__)
 
 SCHEMA = [
     "Line",
@@ -181,7 +184,7 @@ def calculated_cutoffs(ets_pol: str, line: str) -> dict[str, str]:
 
 def clean_booking_no(value: str, line: str = "") -> str:
     cleaned = re.sub(r"[^\w-]", "", value or "").strip()
-    return re.sub(r"\D", "", cleaned) if re.search(r"cosco", line or "", flags=re.I) else cleaned
+    return cleaned.upper() if re.search(r"cosco", line or "", flags=re.I) else cleaned
 
 
 def clean_voyage(value: str) -> str:
@@ -233,9 +236,10 @@ def format_equipment(raw: str) -> str:
     if not raw:
         return ""
 
-    m = re.search(r"(\d+)['\"]?\s*DRY\s*HC[.\-]+(\d+)", raw, flags=re.I)
+    m = re.search(r"(20|40|45)['\"]?\s*DRY\s*HC[.\-]+(\d+)", raw, flags=re.I)
     if m:
-        return f"{m.group(2)} x {m.group(1)}'HC"
+        size = "40" if m.group(1) == "45" else m.group(1)
+        return f"{m.group(2)} x {size}'HC"
 
     m = re.search(r"(\d+)\s*[xX]\s*(20|40|45)['\"]?\s*(ST|DRY|GP|HC|HQ|HCX|HIGH\s*CUBE|HI.?CUBE)", raw, flags=re.I)
     if m:
@@ -318,6 +322,14 @@ def finalize(record: dict[str, str]) -> dict[str, str]:
     ):
         cutoff_date = parse_date(out[key])
         if ets_date and cutoff_date and cutoff_date > ets_date:
+            logger.warning(
+                "Suspicious cutoff ignored: line=%s booking=%s field=%s cutoff=%s ets=%s",
+                out["Line"],
+                clean_booking_no(out["Booking No."], out["Line"]),
+                key,
+                fmt_date(cutoff_date),
+                fmt_date(ets_date),
+            )
             out[key] = ""
     if not out["SI & VGM Cut Off (Calculated)"]:
         out["SI & VGM Cut Off (Calculated)"] = fallback["si_vgm"]
@@ -350,20 +362,26 @@ def legacy_generic_booking_no(s: str) -> str:
 def extract_cutoffs(s: str, line: str = "") -> dict[str, str]:
     si_dates = [
         first_match(s, [rf"(?:INTENDED\s+)?SI CUT-OFF\s*:?\s*({DATE_RE})"]),
+        first_match(s, [rf"SI Cut-Off\s+VGM Cut-Off\s+Port Cut-Off\s+({DATE_RE})"]),
         first_match(s, [rf"Shipping instruction closing.*?({DATE_RE})"]),
         first_match(s, [rf"Document Close Date\s*:?\s*({DATE_RE})"]),
+        first_match(s, [rf"SHIPPING INSTRUCTIONS CUT-OFF.*?({DATE_RE})\s+\d{{1,2}}:\d{{2}}"]),
     ]
     vgm_dates = [
         first_match(s, [rf"(?:INTENDED\s+)?VGM CUT-OFF\s*:?\s*({DATE_RE})"]),
+        first_match(s, [rf"SI Cut-Off\s+VGM Cut-Off\s+Port Cut-Off\s+{DATE_RE}\s+\d{{1,2}}:\d{{2}}\s+({DATE_RE})"]),
         first_match(s, [rf"VGM cut-off.*?({DATE_RE})"]),
+        first_match(s, [rf"VERIFIED GROSS MASS.*?CUT-OFF\s*({DATE_RE})\s+\d{{1,2}}:\d{{2}}"]),
     ]
     gate_dates = [
         first_match(s, [rf"(?:INTENDED\s+)?FCL CY CUT-OFF\s*:?\s*({DATE_RE})"]),
+        first_match(s, [rf"SI Cut-Off\s+VGM Cut-Off\s+Port Cut-Off\s+{DATE_RE}\s+\d{{1,2}}:\d{{2}}\s+{DATE_RE}\s+\d{{1,2}}:\d{{2}}\s+({DATE_RE})"]),
         first_match(s, [rf"FCL delivery cut-off.*?({DATE_RE})"]),
         first_match(s, [rf"Port Cut-Off Date/Time:\s*({DATE_RE})"]),
         first_match(s, [rf"Gate Close Date.*?({DATE_RE})"]),
         first_match(s, [rf"({DATE_RE})\s+00:00\s*Gate Close Date"]),
         first_match(s, [rf"Return Equip.*?({DATE_RE})\s+\d{{1,2}}:\d{{2}}"]),
+        first_match(s, [rf"REEFERCUT-OFF.*?({DATE_RE})\s+\d{{1,2}}:\d{{2}}"]),
     ]
 
     si_vgm = earliest_date([*si_dates, *vgm_dates])
@@ -371,6 +389,8 @@ def extract_cutoffs(s: str, line: str = "") -> dict[str, str]:
     assigning = ""
     if line == "Hapag-Lloyd":
         assigning = first_match(s, [rf"Earliest container delivery date.*?({DATE_RE})"])
+    if line == "MSC" and not gate_in:
+        gate_in = first_match(s, [rf"SPECIAL CUT\s*-OFF.*?({DATE_RE})\s+\d{{1,2}}:\d{{2}}"])
     return {"si_vgm": si_vgm, "assigning": assigning, "gate_in": gate_in}
 
 
@@ -381,11 +401,11 @@ def parse_cosco(text: str) -> dict[str, str]:
     record = base_record("COSCO")
     record.update(
         {
-            "Booking No.": first_match(s, [r"BOOKING NUMBER:\s*([A-Z0-9-]+)", r"\b(COEU\d+)\b"]),
+            "Booking No.": first_match(s, [r"BOOKING NUMBER:\s*([A-Z]{4}\s*\d+)", r"\b(COEU\s*\d+)\b"]),
             "Equipment": first_match(s, [r"(?:QTY SIZE/TYPE|BOOKING QTY SIZE/TYPE):\s*([0-9]+\s*x\s*[0-9]+'?\s*Hi-?Cube Container)"]),
             "Vessel Name": vv["vessel"],
             "Voyage No.": vv["voyage"],
-            "Port of Loading": first_match(s, [r"PORT OF LOADING:\s*(.+?)\s+ETA:"]),
+            "Port of Loading": first_match(s, [r"PORT OF LOADING:\s*(.+?)(?:ETA:|INTENDED VESSEL/VOYAGE:)"]),
             "Port of Discharge": first_match(s, [r"PORT OF DISCHARGE:\s*(.+?)\s+FINAL DESTINATION:"]),
             "Final Dest.": first_match(s, [r"FINAL DESTINATION:\s*(.+?)\s+ESTIMATED CARGO"]),
             "ETS POL / Sailing Date": first_match(s, [rf"INTENDED VESSEL/VOYAGE:.*?ETD:\s*({DATE_RE})"]),
@@ -402,14 +422,14 @@ def parse_cma_cgm(text: str) -> dict[str, str]:
     s = one_line(text)
     record = base_record("CMA CGM")
     route = re.search(
-        rf"ROUTE INFORMATION.*?ALEXANDRIA\s+({DATE_RE})\s+({DATE_RE})\s+((?:CMA CGM|APL|ANL|CNC)[A-Z0-9 ]+?)\s+(0[A-Z0-9 ]+?MA)\s+",
+        rf"ROUTE INFORMATION.*?ALEXANDRIA\s+({DATE_RE})\s+({DATE_RE})\s*((?:CMA CGM|APL|ANL|CNC)[A-Z0-9 ]+?)(0[A-Z0-9]+MA)\s+BEX2.*?KOPER\s+({DATE_RE})",
         s,
         flags=re.I | re.S,
     )
     if route:
         vessel = route.group(3)
         voyage = route.group(4)
-        pol, pod, final_dest, ets, eta = "Alexandria", "Koper", "Budapest", route.group(2), route.group(1)
+        pol, pod, final_dest, ets, eta = "Alexandria", "Koper", "Budapest", route.group(2), route.group(5)
     else:
         vessel = first_match(s, [r"Vessel\s+(CMA CGM [A-Z0-9 ]+?)\s+\d{1,2}-[A-Z]{3}", r"([A-Z ]+CGM [A-Z0-9 ]+)\s*/\s*([A-Z0-9]+)Vessel/Voyage"])
         voyage = first_match(s, [r"Voyage\s+([A-Z0-9 ]+?)\s+Vessel", r"/\s*([A-Z0-9]+)Vessel/Voyage"])
@@ -417,7 +437,7 @@ def parse_cma_cgm(text: str) -> dict[str, str]:
         pod = first_match(s, [r"POD\s+([A-Z ]+?)\s+Booking Ref", r"([A-Z ]+)\s+ETA:\s+Port Of Discharge"])
         final_dest = first_match(s, [r"Final Place Of Delivery:\s*([^:]+?)\s+FPD ETA"]) or pod
         ets = first_match(s, [rf"(?:CMA\s+CGM|APL|ANL|CNC)[A-Z0-9 ]+\s+({DATE_RE})\s+POL", rf"Port Of Loading:.*?({DATE_RE})\s+\d{{1,2}}:\d{{2}}\s*ETD:"])
-        eta = first_match(s, [rf"({DATE_RE})\s+\d{{1,2}}:\d{{2}}\s+SALVADOR\s+ETA:", rf"Transhipment:.*?({DATE_RE})\s+\d{{1,2}}:\d{{2}}\s+SALVADOR"])
+        eta = first_match(s, [rf"({DATE_RE})\s+\d{{1,2}}:\d{{2}}\s*SALVADOR\s+ETA:", rf"Transhipment:.*?({DATE_RE})\s+\d{{1,2}}:\d{{2}}\s*SALVADOR"])
 
     cuts = extract_cutoffs(s, "CMA CGM")
     record.update(
@@ -503,9 +523,19 @@ def extract_msc_booking_no(s: str) -> str:
 
 def parse_msc(text: str) -> dict[str, str]:
     s = one_line(text)
-    equip_type = first_match(s, [r"EQUIP\.TYPE/NUMBER.*?\b(40HC|40GP|20GP|20HC)\b", r"\b(40HC|40GP|20GP|20HC)\b\s+DEHUMIDIFICATION"])
-    qty = first_match(s, [r"\b(40HC|40GP|20GP|20HC)\b.*?\b([0-9]+)\s+N\s+%"], 2) or first_match(s, [r"\b(40HC|40GP|20GP|20HC)\b.*?cbm/h\s+0\s+([0-9]+)\s+N"], 2)
+    equip_type = first_match(s, [r"EQUIP\.TYPE/NUMBER.*?(?:^|[^A-Z0-9])(40HC|40GP|20GP|20HC)", r"(40HC|40GP|20GP|20HC)\s+DEHUMIDIFICATION"])
+    qty = (
+        first_match(s, [r"\b(40HC|40GP|20GP|20HC)\b.*?\b([0-9]+)\s+N\s+%"], 2)
+        or first_match(s, [r"\b(40HC|40GP|20GP|20HC)\b.*?cbm/h\s+0\s*([0-9]+)\s+N"], 2)
+        or first_match(s, [r"DRYGIOIA TAURO\s+\d+\s+\d+\s+\d+\s+([0-9]+)TERNI"])
+    )
     cuts = extract_cutoffs(s, "MSC")
+    msc_gate_cutoff = first_match(
+        s,
+        [rf"REEFERCUT-OFF\(Date/ Time \)\s+{DATE_RE}\s+\d{{1,2}}:\d{{2}}\s+({DATE_RE})"],
+    )
+    if msc_gate_cutoff:
+        cuts["gate_in"] = msc_gate_cutoff
     eta_pod = first_match(
         s,
         [
@@ -519,12 +549,12 @@ def parse_msc(text: str) -> dict[str, str]:
         {
             "Booking No.": extract_msc_booking_no(s),
             "Equipment": f"{qty} x {equip_type}" if qty and equip_type else equip_type,
-            "Vessel Name": first_match(s, [r"PORT SAID WEST\s+(MSC [A-Z0-9 ]+?)\s+\([^)]*\)\s*/\s*[A-Z]+\s+CIVITAVECCHIA", r"PORT SAID WEST\s+(MSC [A-Z0-9 ]+?)\s+CIVITAVECCHIA"]),
-            "Voyage No.": first_match(s, [r"CIVITAVECCHIA\s+([A-Z0-9]+)\s+\d{2}/\d{2}/\d{4}"]),
+            "Vessel Name": first_match(s, [r"PORT SAID WEST\s+(MSC [A-Z0-9 ]+?)\s+\([^)]*\)\s*/\s*[A-Z]+\s*CIVITAVECCHIA", r"PORT SAID WEST\s+(MSC [A-Z0-9 ]+?)\s+CIVITAVECCHIA"]),
+            "Voyage No.": first_match(s, [r"CIVITAVECCHIA\s*([A-Z0-9]+)\s*(?:\d{2}/\d{2}/\d{4})"]),
             "Port of Loading": "Port Said West",
             "Port of Discharge": "Civitavecchia",
             "Final Dest.": first_match(s, [r"GIOIA TAURO.*?([A-Z ]+,\s*ITALY)\s+REEFER"]) or "Terni, Italy",
-            "ETS POL / Sailing Date": first_match(s, [r"AG604R\s+(\d{2}/\d{2}/\d{4})\s+05:00", r"EST\. TIME OF ARRIVAL/DEPARTURE.*?(\d{2}/\d{2}/\d{4})\s+05:00"]),
+            "ETS POL / Sailing Date": first_match(s, [r"AG604R\s*(\d{2}/\d{2}/\d{4})\s+05:00", r"EST\. TIME OF ARRIVAL/DEPARTURE.*?(\d{2}/\d{2}/\d{4})\s+05:00"]),
             "ETA POD / Arrival Date": eta_pod or "N/A",
             "SI & VGM Cut Off (Calculated)": cuts["si_vgm"],
             "Assigning Cut Off (Calculated)": cuts["assigning"],
@@ -542,7 +572,7 @@ def parse_one(text: str) -> dict[str, str]:
     record.update(
         {
             "Booking No.": first_match(s, [r"Booking No\s*:\s*([A-Z0-9]+?)(?=Booking|Booking Ref|Booking Date|$)", r"\b(ALYG\d+)\b"]),
-            "Equipment": first_match(s, [r"Equipment Type/Q.?ty\s*:\s*([^:]+?)Commodity"]),
+            "Equipment": first_match(s, [r"Equipment Type/Q.?ty\s*:\s*(.+?)(?:Commo\s*dity|Estimated Weight)"]),
             "Vessel Name": vv["vessel"],
             "Voyage No.": vv["voyage"],
             "Port of Loading": first_match(s, [r"Port of Loading\s*:\s*(.+?)\s*Terminal\s*:", r"Port of Loading\s*:\s*([^:]+?)Port of Discharging"]),
@@ -560,7 +590,7 @@ def parse_one(text: str) -> dict[str, str]:
 
 def parse_yang_ming(text: str) -> dict[str, str]:
     s = one_line(text)
-    vv = first_match(s, [r"([A-Z ]+/\s*[0-9A-Z]+)\s+\d{2}/\d{2}/\d{4}\s+DAMIETTA"])
+    vv = first_match(s, [r":\s*([A-Z ]+/\s*[0-9A-Z]+)\s+\d{2}/\d{2}/\d{4}\s*DAMIETTA", r"([A-Z ]+/\s*[0-9A-Z]+)\s+\d{2}/\d{2}/\d{4}\s+DAMIETTA"])
     parts = [part.strip() for part in vv.split("/", 1)] if vv else ["", ""]
     cuts = extract_cutoffs(s, "Yang Ming")
     record = base_record("Yang Ming")
@@ -591,8 +621,8 @@ def parse_shipping_order(text: str) -> dict[str, str]:
         {
             "Booking No.": legacy_generic_booking_no(s),
             "Equipment": first_match(s, [r"(\d+\s+40HCX)"]),
-            "Vessel Name": first_match(s, [r"POLYPROPYLENE HOMOPOLYMER\s+(.+?)\s+Voy:", r"([A-Z][A-Z ]+)\s+Voy:\s*[A-Z0-9]+"]),
-            "Voyage No.": first_match(s, [r"Voy:\s*([A-Z0-9]+)"]),
+            "Vessel Name": first_match(s, [r"Port of Discharge\s+[A-Z ]+\s+POLYPROPYLENE HOMOPOLYMER\s*([A-Z ]+?)\s+Voy:", r"POLYPROPYLENE HOMOPOLYMER\s*([A-Z ]+?)\s+Voy:", r"([A-Z][A-Z ]+)\s+Voy:\s*[A-Z0-9]+"]),
+            "Voyage No.": first_match(s, [r"Voy:\s*([A-Z0-9]+)(?=Date|Place|$)"]),
             "Port of Loading": first_match(s, [r"(\bPORT SAID P\.SAID TERM\b)"]) or "Port Said",
             "Port of Discharge": first_match(s, [r"Port of Discharge\s+([A-Z ]+)\s+POLYPROPYLENE"]),
             "Final Dest.": "N/A",
