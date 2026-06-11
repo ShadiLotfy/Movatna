@@ -653,7 +653,8 @@ tbody tr:hover {
 .loader {
   align-items: center;
   background:
-    radial-gradient(circle at 50% 22%, rgba(85, 120, 132, 0.34), transparent 34rem),
+    radial-gradient(circle at 50% 20%, rgba(85, 120, 132, 0.34), transparent 34rem),
+    linear-gradient(180deg, rgba(4, 7, 9, 0.88), rgba(2, 4, 5, 0.94) 58%, rgba(1, 2, 3, 0.98)),
     rgba(2, 4, 5, 0.92);
   display: flex;
   inset: 0;
@@ -698,6 +699,9 @@ tbody tr:hover {
 }
 
 .ship-track {
+  background:
+    radial-gradient(ellipse at 50% 82%, rgba(142, 180, 199, 0.16), transparent 52%),
+    linear-gradient(180deg, transparent 0 48%, rgba(11, 25, 31, 0.36) 49%, rgba(4, 11, 15, 0.76) 100%);
   border-bottom: 1px solid rgba(245, 241, 233, 0.34);
   height: 168px;
   overflow: hidden;
@@ -715,7 +719,9 @@ tbody tr:hover {
 }
 
 .sea {
-  background: repeating-linear-gradient(90deg, transparent 0 28px, rgba(245, 241, 233, 0.16) 28px 30px, transparent 30px 72px);
+  background:
+    repeating-linear-gradient(90deg, transparent 0 28px, rgba(245, 241, 233, 0.16) 28px 30px, transparent 30px 72px),
+    radial-gradient(ellipse at center, rgba(142, 180, 199, 0.18), transparent 58%);
   bottom: 20px;
   height: 42px;
   left: -80px;
@@ -733,8 +739,15 @@ tbody tr:hover {
   opacity: 0.46;
 }
 
+.sea-c {
+  animation: waterDrift 9s linear infinite;
+  bottom: 36px;
+  opacity: 0.28;
+}
+
 .ship {
-  bottom: 52px;
+  animation: shipFloat 2.6s ease-in-out infinite;
+  bottom: 54px;
   height: 44px;
   left: 0;
   position: absolute;
@@ -763,6 +776,16 @@ tbody tr:hover {
   position: absolute;
   transform: skewX(-12deg);
   width: 4px;
+}
+
+.ship i {
+  background: rgba(245, 241, 233, 0.28);
+  bottom: -7px;
+  display: block;
+  height: 2px;
+  left: 12px;
+  position: absolute;
+  width: 92px;
 }
 
 .ship span {
@@ -795,6 +818,16 @@ tbody tr:hover {
   }
   to {
     transform: translateX(80px);
+  }
+}
+
+@keyframes shipFloat {
+  0%,
+  100% {
+    margin-bottom: 0;
+  }
+  50% {
+    margin-bottom: 5px;
   }
 }
 

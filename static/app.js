@@ -324,14 +324,21 @@ $("loginForm").addEventListener("submit", async (event) => {
 });
 
 $("logoutBtn").addEventListener("click", async () => {
-  await api("/api/auth/logout", { method: "POST" });
-  location.reload();
+  showLoader(true, "Signing out");
+  try {
+    await api("/api/auth/logout", { method: "POST" });
+    location.reload();
+  } catch (error) {
+    showLoader(false);
+    toast(error.message, true);
+  }
 });
 
 $("changePasswordBtn").addEventListener("click", () => openModal("changePasswordModal"));
 
 $("changePasswordForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  showLoader(true, "Updating password");
   try {
     await api("/api/auth/change-password", {
       method: "POST",
@@ -345,6 +352,8 @@ $("changePasswordForm").addEventListener("submit", async (event) => {
     toast("Password updated");
   } catch (error) {
     toast(error.message, true);
+  } finally {
+    showLoader(false);
   }
 });
 
@@ -437,13 +446,16 @@ function setTab(tab) {
   $("adminTab").classList.toggle("active", tab === "admin");
 }
 
-async function loadUsers() {
+async function loadUsers(showProgress = true) {
+  if (showProgress) showLoader(true, "Loading users");
   try {
     const data = await api("/api/admin/users");
     users = data.users || [];
     renderUsers();
   } catch (error) {
     toast(error.message, true);
+  } finally {
+    if (showProgress) showLoader(false);
   }
 }
 
@@ -479,6 +491,7 @@ $("openCreateUserBtn").addEventListener("click", () => openModal("createUserModa
 
 $("createUserForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  showLoader(true, "Creating user");
   try {
     const data = await api("/api/admin/users", {
       method: "POST",
@@ -493,10 +506,12 @@ $("createUserForm").addEventListener("submit", async (event) => {
     $("createUserForm").reset();
     $("newUserUploadLimit").value = "25";
     closeModal("createUserModal");
-    await loadUsers();
+    await loadUsers(false);
     showGeneratedPassword(data.generatedPassword, `Password for ${data.user.username}`);
   } catch (error) {
     toast(error.message, true);
+  } finally {
+    showLoader(false);
   }
 });
 
@@ -516,28 +531,35 @@ $("userList").addEventListener("click", async (event) => {
   }
   if (reset) {
     if (!confirm("Reset this user's password?")) return;
+    showLoader(true, "Resetting password");
     try {
       const data = await api(`/api/admin/users/${reset.dataset.resetUser}/reset-password`, { method: "POST" });
-      await loadUsers();
+      await loadUsers(false);
       showGeneratedPassword(data.generatedPassword, `Reset password for ${data.user.username}`);
     } catch (error) {
       toast(error.message, true);
+    } finally {
+      showLoader(false);
     }
   }
   if (del) {
     if (!confirm("Delete this user?")) return;
+    showLoader(true, "Deleting user");
     try {
       await api(`/api/admin/users/${del.dataset.deleteUser}`, { method: "DELETE" });
-      await loadUsers();
+      await loadUsers(false);
       toast("User deleted");
     } catch (error) {
       toast(error.message, true);
+    } finally {
+      showLoader(false);
     }
   }
 });
 
 $("editUserForm").addEventListener("submit", async (event) => {
   event.preventDefault();
+  showLoader(true, "Saving user");
   try {
     await api(`/api/admin/users/${$("editUserId").value}`, {
       method: "PATCH",
@@ -549,10 +571,12 @@ $("editUserForm").addEventListener("submit", async (event) => {
       }),
     });
     closeModal("editUserModal");
-    await loadUsers();
+    await loadUsers(false);
     toast("User updated");
   } catch (error) {
     toast(error.message, true);
+  } finally {
+    showLoader(false);
   }
 });
 
