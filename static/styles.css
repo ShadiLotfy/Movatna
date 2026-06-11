@@ -1,18 +1,18 @@
 :root {
-  --bg: #030303;
-  --ink: #f7f1e6;
-  --paper: #fff7e7;
-  --muted: #a69d91;
-  --soft: rgba(245, 241, 233, 0.68);
-  --faint: rgba(245, 241, 233, 0.12);
-  --line: rgba(245, 241, 233, 0.18);
-  --line-strong: rgba(245, 241, 233, 0.38);
-  --panel: rgba(12, 12, 11, 0.74);
-  --panel-solid: #0b0b0a;
-  --gold: #c9a76a;
-  --gold-soft: #ead6a5;
-  --sea: #31525f;
-  --blue: #8fb3bf;
+  --bg: #010306;
+  --ink: #eaf7ff;
+  --paper: #f4fbff;
+  --muted: #8193a0;
+  --soft: rgba(222, 241, 250, 0.68);
+  --faint: rgba(222, 241, 250, 0.12);
+  --line: rgba(210, 234, 246, 0.16);
+  --line-strong: rgba(223, 244, 255, 0.42);
+  --panel: rgba(3, 8, 13, 0.78);
+  --panel-solid: #050b10;
+  --gold: #9ac9d8;
+  --gold-soft: #d8f3ff;
+  --sea: #0d2d3b;
+  --blue: #b7e7f7;
   --danger: #ff6a5f;
   --ok: #73d9a3;
   --font: "D-DIN", "DIN Alternate", "Arial Narrow", Arial, sans-serif;
@@ -42,6 +42,52 @@ body::selection {
   color: #080808;
 }
 
+.page-frame {
+  inset: clamp(10px, 1.5vw, 22px);
+  pointer-events: none;
+  position: fixed;
+  z-index: 120;
+}
+
+.page-frame::before,
+.page-frame::after,
+.page-frame span::before,
+.page-frame span::after {
+  border-color: rgba(216, 243, 255, 0.42);
+  content: "";
+  height: 34px;
+  position: absolute;
+  width: 34px;
+}
+
+.page-frame::before {
+  border-left: 1px solid;
+  border-top: 1px solid;
+  left: 0;
+  top: 0;
+}
+
+.page-frame::after {
+  border-right: 1px solid;
+  border-top: 1px solid;
+  right: 0;
+  top: 0;
+}
+
+.page-frame span:first-child::before {
+  border-bottom: 1px solid;
+  border-left: 1px solid;
+  bottom: 0;
+  left: 0;
+}
+
+.page-frame span:first-child::after {
+  border-bottom: 1px solid;
+  border-right: 1px solid;
+  bottom: 0;
+  right: 0;
+}
+
 button,
 input,
 select {
@@ -58,10 +104,10 @@ button {
 
 .site-bg {
   background:
-    linear-gradient(180deg, rgba(6, 6, 5, 0.28), rgba(3, 3, 3, 0.98) 58%, #010101),
-    radial-gradient(circle at 64% 8%, rgba(201, 167, 106, 0.2), transparent 29rem),
-    radial-gradient(circle at 14% 74%, rgba(49, 82, 95, 0.28), transparent 35rem),
-    #030303;
+    linear-gradient(180deg, rgba(1, 5, 8, 0.24), rgba(1, 3, 6, 0.98) 58%, #000204),
+    radial-gradient(circle at 62% 10%, rgba(183, 231, 247, 0.16), transparent 28rem),
+    radial-gradient(circle at 18% 72%, rgba(13, 45, 59, 0.48), transparent 36rem),
+    #010306;
   inset: 0;
   overflow: hidden;
   position: fixed;
@@ -70,8 +116,8 @@ button {
 
 .bg-horizon {
   background:
-    linear-gradient(90deg, transparent, rgba(245, 241, 233, 0.3), transparent),
-    linear-gradient(180deg, transparent, rgba(21, 31, 36, 0.56));
+    linear-gradient(90deg, transparent, rgba(216, 243, 255, 0.38), transparent),
+    linear-gradient(180deg, transparent, rgba(9, 25, 34, 0.68));
   bottom: 22vh;
   height: 1px;
   left: 0;
@@ -81,8 +127,8 @@ button {
 
 .bg-grid {
   background:
-    linear-gradient(rgba(245, 241, 233, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(245, 241, 233, 0.035) 1px, transparent 1px);
+    linear-gradient(rgba(216, 243, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(216, 243, 255, 0.035) 1px, transparent 1px);
   background-size: 86px 86px;
   inset: 0;
   mask-image: linear-gradient(180deg, transparent, #000 14%, #000 72%, transparent);
@@ -92,8 +138,8 @@ button {
 
 .bg-waves {
   background:
-    radial-gradient(72px 18px at 36px 18px, transparent 30px, rgba(234, 214, 165, 0.12) 31px, transparent 33px),
-    radial-gradient(92px 22px at 46px 22px, transparent 39px, rgba(143, 179, 191, 0.1) 40px, transparent 42px);
+    radial-gradient(72px 18px at 36px 18px, transparent 30px, rgba(216, 243, 255, 0.12) 31px, transparent 33px),
+    radial-gradient(92px 22px at 46px 22px, transparent 39px, rgba(38, 117, 145, 0.18) 40px, transparent 42px);
   background-size: 144px 42px, 184px 52px;
   bottom: -6vh;
   height: 28vh;
@@ -125,6 +171,16 @@ button {
   z-index: 40;
 }
 
+.topbar::after {
+  background: linear-gradient(90deg, transparent, rgba(216, 243, 255, 0.36), transparent);
+  bottom: -1px;
+  content: "";
+  height: 1px;
+  left: clamp(18px, 4vw, 64px);
+  position: absolute;
+  right: clamp(18px, 4vw, 64px);
+}
+
 .brand,
 .panel-kicker,
 .section-title,
@@ -142,9 +198,21 @@ label span,
 
 .brand {
   color: var(--paper);
-  font-size: 24px;
+  font-size: clamp(24px, 2.4vw, 38px);
   font-weight: 900;
+  letter-spacing: 0.2em;
   line-height: 1;
+  position: relative;
+}
+
+.brand::after {
+  background: var(--blue);
+  bottom: -8px;
+  content: "";
+  height: 1px;
+  left: 0;
+  position: absolute;
+  width: 42px;
 }
 
 .brand-sub,
@@ -190,7 +258,7 @@ label span,
 .app-shell {
   margin: 0 auto;
   max-width: 1680px;
-  padding: clamp(24px, 4.5vw, 72px);
+  padding: clamp(28px, 5vw, 84px);
 }
 
 .home-view {
@@ -203,9 +271,60 @@ label span,
   align-items: end;
   display: grid;
   gap: clamp(28px, 6vw, 90px);
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.48fr);
+  grid-template-columns: minmax(118px, 0.18fr) minmax(0, 1.05fr) minmax(300px, 0.42fr);
   min-height: calc(100vh - 188px);
   padding-top: clamp(30px, 7vw, 100px);
+}
+
+.section-rail {
+  align-self: center;
+  border-left: 1px solid var(--line);
+  display: grid;
+  gap: clamp(14px, 2.5vw, 26px);
+  padding: 18px 0 18px 22px;
+}
+
+.section-rail button {
+  background: transparent;
+  border: 0;
+  color: rgba(222, 241, 250, 0.42);
+  font-size: clamp(13px, 1vw, 16px);
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  padding: 0;
+  position: relative;
+  text-align: left;
+  text-transform: uppercase;
+  transition: color 0.28s, transform 0.28s;
+}
+
+.section-rail button::before {
+  background: var(--blue);
+  content: "";
+  height: 1px;
+  left: -22px;
+  opacity: 0;
+  position: absolute;
+  top: 50%;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: opacity 0.28s, transform 0.28s;
+  width: 14px;
+}
+
+.section-rail button:hover,
+.section-rail button:focus-visible,
+.section-rail button.active {
+  color: var(--paper);
+  outline: none;
+  transform: translateX(4px);
+}
+
+.section-rail button:hover::before,
+.section-rail button:focus-visible::before,
+.section-rail button.active::before {
+  opacity: 1;
+  transform: scaleX(1);
 }
 
 .hero-actions {
@@ -214,6 +333,8 @@ label span,
 }
 
 .hero-stat-panel {
+  backdrop-filter: blur(16px);
+  background: rgba(3, 8, 13, 0.34);
   border-left: 1px solid var(--line);
   display: grid;
   gap: 0;
@@ -278,6 +399,7 @@ label span,
     linear-gradient(180deg, rgba(255, 247, 231, 0.04), transparent 32%),
     rgba(10, 11, 11, 0.72);
   border: 1px solid var(--line);
+  clip-path: polygon(22px 0, 100% 0, 100% calc(100% - 22px), calc(100% - 22px) 100%, 0 100%, 0 22px);
   color: var(--ink);
   display: grid;
   gap: 20px;
@@ -331,6 +453,7 @@ label span,
 
 .tool-status {
   border: 1px solid rgba(201, 167, 106, 0.42);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
   color: var(--gold-soft);
   justify-self: start;
   padding: 7px 10px;
@@ -366,6 +489,7 @@ label span,
     linear-gradient(180deg, rgba(255, 247, 231, 0.035), transparent 24%),
     linear-gradient(180deg, rgba(15, 15, 14, 0.88), rgba(7, 8, 8, 0.74));
   border: 1px solid var(--line);
+  clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.28);
 }
 
@@ -385,7 +509,7 @@ label span,
 h1,
 h2 {
   font-weight: 900;
-  letter-spacing: 0;
+  letter-spacing: 0.035em;
   margin: 0;
   text-transform: uppercase;
 }
@@ -476,7 +600,9 @@ select:focus {
 .email-action {
   background: transparent;
   border: 1px solid var(--line-strong);
+  clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
   color: var(--ink);
+  letter-spacing: 0.12em;
   min-height: 42px;
   padding: 11px 18px;
   position: relative;
@@ -487,7 +613,7 @@ select:focus {
 
 .primary-btn {
   background: var(--paper);
-  color: #080808;
+  color: #02070b;
   font-weight: 900;
 }
 
@@ -618,6 +744,7 @@ button:disabled {
 .upload-limit-card {
   background: rgba(255, 247, 231, 0.035);
   border: 1px solid var(--line);
+  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
   display: grid;
   gap: 14px;
   grid-column: 1 / -1;
@@ -892,6 +1019,10 @@ tbody tr:hover {
   color: #ffd4d0;
 }
 
+.text-swap {
+  animation: textSwap 0.48s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
 .site-footer {
   align-items: center;
   border-top: 1px solid var(--line);
@@ -903,6 +1034,24 @@ tbody tr:hover {
   letter-spacing: 0.08em;
   padding: 22px clamp(18px, 4vw, 64px);
   text-transform: uppercase;
+}
+
+.site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: center;
+}
+
+.site-footer a {
+  color: rgba(222, 241, 250, 0.68);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.site-footer a:hover,
+.site-footer a:focus-visible {
+  color: var(--paper);
 }
 
 .modal-overlay {
@@ -1208,6 +1357,17 @@ tbody tr:hover {
   }
 }
 
+@keyframes textSwap {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes fadeIn {
   from {
     opacity: 0;
@@ -1233,6 +1393,18 @@ tbody tr:hover {
   .command-panel,
   .home-hero {
     grid-template-columns: 1fr;
+  }
+
+  .section-rail {
+    align-self: stretch;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 18px 0 0;
+  }
+
+  .section-rail button::before {
+    display: none;
   }
 
   .auth-panel {
@@ -1290,6 +1462,10 @@ tbody tr:hover {
   .hero-stat-panel {
     border-left: 0;
     margin-bottom: 0;
+  }
+
+  .page-frame {
+    inset: 8px;
   }
 
   .stat-line {

@@ -7,6 +7,13 @@
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
   <body>
+    <div class="page-frame" aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+
     <div class="site-bg">
       <div class="bg-horizon"></div>
       <div class="bg-grid"></div>
@@ -40,12 +47,11 @@
     <header class="topbar">
       <div>
         <div class="brand">MOVANTA</div>
-        <div class="brand-sub">Document Intelligence / Maritime Operations</div>
+        <div class="brand-sub">Maritime Intelligence Systems</div>
       </div>
       <nav id="publicNav" class="public-nav">
-        <button id="homeNavBtn" class="ghost-btn" type="button">Home</button>
-        <button id="toolsNavBtn" class="ghost-btn" type="button">Tools</button>
-        <button id="loginNavBtn" class="primary-btn" type="button">Login / Signup</button>
+        <button id="loginNavBtn" class="ghost-btn nav-corner" type="button">Login</button>
+        <button id="toolsNavBtn" class="primary-btn nav-corner" type="button">Menu</button>
       </nav>
       <div id="userBar" class="userbar hidden">
         <span id="userIdentity"></span>
@@ -58,13 +64,21 @@
     <main class="app-shell">
       <section id="homeView" class="home-view">
         <section class="home-hero">
+          <nav class="section-rail" aria-label="Movanta sections">
+            <button type="button" data-home-section="future">Future</button>
+            <button type="button" data-home-section="innovation">Innovation</button>
+            <button type="button" data-home-section="automation">Automation</button>
+            <button type="button" data-home-section="accuracy">Accuracy</button>
+            <button type="button" data-home-section="logistics">Logistics</button>
+            <button type="button" data-home-section="legacy">Legacy</button>
+          </nav>
           <div class="hero-copy">
-            <div class="panel-kicker">Movanta Intelligence Suite</div>
-            <h1>Maritime documents, made operational.</h1>
-            <p>Movanta gives logistics teams a controlled workspace for turning shipment documents into clean, reviewable information.</p>
+            <div id="homeSectionKicker" class="panel-kicker">Future</div>
+            <h1 id="homeHeadline">Booking extraction for modern logistics.</h1>
+            <p id="homeIntro">Movanta turns shipment documents into clean operational intelligence inside a secure, cinematic workspace built for fast-moving logistics teams.</p>
             <div class="hero-actions">
-              <button id="heroToolBtn" class="primary-btn" type="button">Open Booking Tool</button>
-              <button id="heroLoginBtn" class="ghost-btn" type="button">Login / Signup</button>
+              <button id="heroToolBtn" class="primary-btn angled-btn" type="button">Booking Extraction Tool</button>
+              <button id="heroLoginBtn" class="ghost-btn angled-btn" type="button">Login / Signup</button>
             </div>
           </div>
           <div class="hero-stat-panel">
@@ -130,7 +144,7 @@
             </label>
             <button class="primary-btn" type="submit">Sign In</button>
           </form>
-          <p class="access-note">Need an account? Contact Movanta at [PUT_MOVANTA_EMAIL_HERE] to request access.</p>
+          <p class="access-note">Need an account? Contact Movanta at movantaa@outlook.com to request access.</p>
         </div>
       </section>
 
@@ -222,8 +236,14 @@
     <div id="toast" class="toast hidden"></div>
 
     <footer class="site-footer">
-      <span>Contact: [PUT_MOVANTA_EMAIL_HERE]</span>
-      <span>© 2026 Movanta. All rights reserved.</span>
+      <span>Contact: movantaa@outlook.com</span>
+      <nav aria-label="Footer links">
+        <a href="mailto:movantaa@outlook.com">Contact</a>
+        <a href="mailto:movantaa@outlook.com?subject=Movanta%20Support">Support</a>
+        <a href="#homeView">Privacy</a>
+        <a href="#homeView">Terms</a>
+      </nav>
+      <span>&copy; 2026 Movanta. All rights reserved.</span>
     </footer>
 
     <div id="passwordModal" class="modal-overlay hidden">

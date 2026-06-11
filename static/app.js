@@ -21,6 +21,39 @@ let loaderProgress = 0;
 let loaderTimer = null;
 let loaderHideTimer = null;
 
+const homeSections = {
+  future: {
+    kicker: "Future",
+    headline: "Booking extraction for modern logistics.",
+    intro: "Movanta turns shipment documents into clean operational intelligence inside a secure, cinematic workspace built for fast-moving logistics teams.",
+  },
+  innovation: {
+    kicker: "Innovation",
+    headline: "From booking PDFs to usable data.",
+    intro: "A refined extraction workspace helps teams review vessel, voyage, port, and cut-off details without manual retyping.",
+  },
+  automation: {
+    kicker: "Automation",
+    headline: "Less document friction. More movement.",
+    intro: "Upload booking confirmations, inspect structured outputs, and prepare operational handoffs with fewer repetitive steps.",
+  },
+  accuracy: {
+    kicker: "Accuracy",
+    headline: "Clear tables for critical shipping moments.",
+    intro: "Movanta keeps extracted fields visible, reviewable, and ready for email workflows without changing your existing process.",
+  },
+  logistics: {
+    kicker: "Logistics",
+    headline: "Built around the rhythm of shipments.",
+    intro: "The interface prioritizes fast upload, clear review, and confident export for teams coordinating containers and timelines.",
+  },
+  legacy: {
+    kicker: "Legacy",
+    headline: "A sharper operating layer for tomorrow.",
+    intro: "Movanta brings a high-end intelligence surface to everyday documentation work while preserving trusted extraction behavior.",
+  },
+};
+
 const $ = (id) => document.getElementById(id);
 
 function setLoaderProgress(value, label) {
@@ -138,6 +171,7 @@ function enhanceRollingText() {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   const selector = [
     ".brand",
+    ".section-rail button",
     ".panel-kicker",
     ".section-title",
     ".tool-status",
@@ -156,6 +190,23 @@ function enhanceRollingText() {
     element.setAttribute("aria-label", text);
     element.innerHTML = `<span class="roll-text" aria-hidden="true"><span class="roll-text__inner"><span>${escapeHtml(text)}</span><span>${escapeHtml(text)}</span></span></span>`;
   });
+}
+
+function setHomeSection(sectionKey) {
+  const section = homeSections[sectionKey] || homeSections.future;
+  $("homeSectionKicker").textContent = section.kicker;
+  $("homeHeadline").textContent = section.headline;
+  $("homeIntro").textContent = section.intro;
+  document.querySelectorAll("[data-home-section]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.homeSection === sectionKey);
+  });
+  document.querySelectorAll("#homeSectionKicker, #homeHeadline, #homeIntro").forEach((el) => {
+    delete el.dataset.rollEnhanced;
+    el.classList.remove("text-swap");
+    void el.offsetWidth;
+    el.classList.add("text-swap");
+  });
+  enhanceRollingText();
 }
 
 function setUser(user) {
@@ -222,7 +273,7 @@ function updateUploadLimitCard() {
   const limit = Number(currentUser.uploadLimit || 0);
   const remaining = Math.max(0, limit - selected);
   const usedRatio = limit > 0 ? Math.min(1, selected / limit) : 1;
-  title.textContent = `${remaining} of ${limit} slots remaining`;
+  title.textContent = `You have ${remaining} upload${remaining === 1 ? "" : "s"} remaining`;
   meter.style.transform = `scaleX(${usedRatio})`;
 
   if (limit < 1) {
@@ -241,7 +292,7 @@ function updateUploadLimitCard() {
     card.classList.add("warning");
     message.textContent = remaining === 0
       ? "This batch uses your full upload capacity."
-      : `Upload capacity is low: ${remaining} slot${remaining === 1 ? "" : "s"} left in this batch.`;
+      : `Upload capacity is low: ${remaining} upload${remaining === 1 ? "" : "s"} left in this batch.`;
     if (submit) submit.disabled = false;
     return;
   }
@@ -450,7 +501,6 @@ $("logoutBtn").addEventListener("click", async () => {
   }
 });
 
-$("homeNavBtn").addEventListener("click", () => show("homeView"));
 $("toolsNavBtn").addEventListener("click", () => $("toolsSection").scrollIntoView({ behavior: "smooth" }));
 $("loginNavBtn").addEventListener("click", () => show("loginView"));
 $("heroLoginBtn").addEventListener("click", () => show("loginView"));
@@ -466,6 +516,10 @@ document.querySelectorAll("[data-tool]").forEach((button) => {
     }
     showComingSoon(tool === "rates" ? "Rates Comparison" : "Documentation Accuracy Checker");
   });
+});
+
+document.querySelectorAll("[data-home-section]").forEach((button) => {
+  button.addEventListener("click", () => setHomeSection(button.dataset.homeSection));
 });
 
 $("changePasswordBtn").addEventListener("click", () => openModal("changePasswordModal"));
@@ -743,4 +797,5 @@ document.querySelectorAll(".modal-overlay").forEach((modal) => {
 });
 
 enhanceRollingText();
+setHomeSection("future");
 bootstrap();
