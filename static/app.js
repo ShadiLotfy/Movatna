@@ -125,22 +125,42 @@ const emailFields = [
 ];
 
 function buildEmailTable(row) {
+  const line = escapeHtml(rowValue(row, "Line") || "");
   const body = emailFields
     .map(([label, getter]) => {
       const value = escapeHtml(getter(row) || "");
       return `<tr>
-        <td style="border:1px solid #000;padding:6px 12px;font-family:Arial,sans-serif;font-size:13px;font-weight:bold;background:#f5f5f5;white-space:nowrap;">${escapeHtml(label)}</td>
-        <td style="border:1px solid #000;padding:6px 12px;font-family:Arial,sans-serif;font-size:13px;background:#ffffff;min-width:180px;">${value}</td>
+        <td style="border:1px solid #000;padding:8px 14px;font-family:Arial,sans-serif;font-size:18px;font-weight:bold;background:#f1f1f1;width:58%;">${escapeHtml(label)}</td>
+        <td style="border:1px solid #000;padding:8px 14px;font-family:Arial,sans-serif;font-size:18px;background:#ffffff;width:42%;">${value}</td>
       </tr>`;
     })
     .join("");
-  return `<table style="border-collapse:collapse;border:1px solid #000;">${body}</table>`;
+  return `<table style="border-collapse:collapse;border:1px solid #000;width:752px;max-width:100%;table-layout:fixed;">
+    <tr>
+      <th colspan="2" style="border:1px solid #000;padding:10px 14px;font-family:Arial,sans-serif;font-size:18px;font-weight:bold;text-align:center;background:#f1f1f1;">${line}</th>
+    </tr>
+    ${body}
+  </table>`;
 }
 
-async function copyHtml(html) {
+function buildEmailTables(selectedRows) {
+  return selectedRows.map((row) => buildEmailTable(row)).join('<div style="height:16px;line-height:16px;">&nbsp;</div>');
+}
+
+function buildEmailPlainText(row) {
+  const line = rowValue(row, "Line") || "";
+  const fields = emailFields.map(([label, getter]) => `${label}\t${getter(row) || ""}`).join("\n");
+  return `${line}\n${fields}`;
+}
+
+function buildEmailPlainTextList(selectedRows) {
+  return selectedRows.map((row) => buildEmailPlainText(row)).join("\n\n");
+}
+
+async function copyHtml(html, text = "") {
   if (window.ClipboardItem && navigator.clipboard?.write) {
     const htmlBlob = new Blob([html], { type: "text/html" });
-    const textBlob = new Blob([html.replace(/<[^>]+>/g, " ")], { type: "text/plain" });
+    const textBlob = new Blob([text || html.replace(/<[^>]+>/g, " ")], { type: "text/plain" });
     await navigator.clipboard.write([new ClipboardItem({ "text/html": htmlBlob, "text/plain": textBlob })]);
     return;
   }
@@ -285,40 +305,8 @@ $("downloadCsvBtn").addEventListener("click", () => {
 
 $("copyAllBtn").addEventListener("click", async () => {
   if (!rows.length) return;
-  const headers = [
-    "Line",
-    "Booking No.",
-    "Equipment",
-    "Vessel Name",
-    "Voyage No.",
-    "Port of Loading",
-    "Port of Discharge",
-    "Final Destination",
-    "ETS POL",
-    "ETA POD",
-    "SI & VGM Cut Off",
-    "Container Assigning Cut Off",
-    "Container Gate In Cut Off",
-  ];
-  const values = rows.map((row) =>
-    [
-      rowValue(row, "Line"),
-      rowValue(row, "Booking No."),
-      rowValue(row, "Equipment"),
-      rowValue(row, "Vessel Name"),
-      rowValue(row, "Voyage No."),
-      rowValue(row, "Port of Loading"),
-      rowValue(row, "Port of Discharge"),
-      rowValue(row, "Final Dest.") || "N/A",
-      rowValue(row, "ETS POL / Sailing Date"),
-      rowValue(row, "ETA POD / Arrival Date"),
-      rowValue(row, "SI & VGM Cut Off (Calculated)"),
-      rowValue(row, "Assigning Cut Off (Calculated)"),
-      rowValue(row, "Gate In Cut Off (Calculated)"),
-    ].join("\t")
-  );
-  await navigator.clipboard.writeText([headers.join("\t"), ...values].join("\n"));
-  toast("Table copied");
+  await copyHtml(buildEmailTables(rows), buildEmailPlainTextList(rows));
+  toast("Email table copied");
 });
 
 function csvCell(value) {
@@ -338,7 +326,7 @@ $("emailGrid").addEventListener("click", async (event) => {
 
   if (copyButton) {
     try {
-      await copyHtml(html);
+      await copyHtml(html, buildEmailPlainText(row));
       toast("Copied for email");
     } catch {
       toast("Copy failed. Use Preview.", true);
@@ -351,7 +339,7 @@ $("emailGrid").addEventListener("click", async (event) => {
   openModal("emailCopyModal");
   $("modalCopyBtn").onclick = async () => {
     try {
-      await copyHtml(html);
+      await copyHtml(html, buildEmailPlainText(row));
       closeModal("emailCopyModal");
       toast("Copied");
     } catch {
