@@ -17,11 +17,49 @@ const schema = [
 let currentUser = null;
 let rows = [];
 let users = [];
+let loaderProgress = 0;
+let loaderTimer = null;
 
 const $ = (id) => document.getElementById(id);
 
-function showLoader(show) {
-  $("loader").classList.toggle("hidden", !show);
+function setLoaderProgress(value, label) {
+  loaderProgress = Math.max(0, Math.min(100, Math.round(value)));
+  const labelEl = $("loaderLabel");
+  const percentEl = $("loaderPercent");
+  const barEl = $("loaderBar");
+  const shipEl = $("loaderShip");
+  const trackEl = document.querySelector(".ship-track");
+  if (label && labelEl) labelEl.textContent = label;
+  if (percentEl) percentEl.textContent = `${loaderProgress}%`;
+  if (barEl) barEl.style.transform = `scaleX(${loaderProgress / 100})`;
+  if (shipEl && trackEl) {
+    const travel = Math.max(0, trackEl.clientWidth - shipEl.clientWidth);
+    shipEl.style.transform = `translateX(${Math.round((travel * loaderProgress) / 100)}px)`;
+  }
+}
+
+function startLoaderDrift(limit = 92, label = "Processing") {
+  window.clearInterval(loaderTimer);
+  loaderTimer = window.setInterval(() => {
+    if (loaderProgress >= limit) return;
+    const step = loaderProgress < 65 ? 3 : 1;
+    setLoaderProgress(Math.min(limit, loaderProgress + step), label);
+  }, 420);
+}
+
+function showLoader(show, label = "Loading content") {
+  const loader = $("loader");
+  if (!loader) return;
+  if (show) {
+    window.clearInterval(loaderTimer);
+    loader.classList.remove("hidden");
+    setLoaderProgress(0, label);
+    startLoaderDrift(88, label);
+    return;
+  }
+  window.clearInterval(loaderTimer);
+  setLoaderProgress(100, "Ready to explore");
+  window.setTimeout(() => loader.classList.add("hidden"), 360);
 }
 
 function toast(message, isError = false) {
@@ -41,6 +79,41 @@ async function api(path, options = {}) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "Request failed");
   return data;
+}
+
+function uploadExtraction(formData) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/extract");
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      setLoaderProgress(Math.min(68, (event.loaded / event.total) * 68), "Uploading PDFs");
+    };
+    xhr.onreadystatechange = () => {
+      if (xhr.readyState === XMLHttpRequest.HEADERS_RECEIVED) {
+        startLoaderDrift(94, "Processing PDFs");
+      }
+    };
+    xhr.onload = () => {
+      let data = {};
+      try {
+        data = JSON.parse(xhr.responseText || "{}");
+      } catch {
+        data = {};
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data);
+        return;
+      }
+      reject(new Error(data.error || "Request failed"));
+    };
+    xhr.onerror = () => reject(new Error("Network error while uploading PDFs"));
+    xhr.ontimeout = () => reject(new Error("PDF processing timed out"));
+    xhr.timeout = 180000;
+    setLoaderProgress(4, "Preparing upload");
+    xhr.send(formData);
+  });
 }
 
 function show(view) {
@@ -215,6 +288,7 @@ function renderEmailCards() {
 }
 
 async function bootstrap() {
+  showLoader(true, "Loading content");
   renderTable();
   try {
     const { user } = await api("/api/me");
@@ -222,12 +296,14 @@ async function bootstrap() {
     show("dashboardView");
   } catch {
     show("loginView");
+  } finally {
+    showLoader(false);
   }
 }
 
 $("loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  showLoader(true);
+  showLoader(true, "Signing in");
   try {
     const { user } = await api("/api/auth/login", {
       method: "POST",
@@ -278,9 +354,9 @@ $("uploadForm").addEventListener("submit", async (event) => {
   if (!files.length) return toast("Choose at least one PDF", true);
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
-  showLoader(true);
+  showLoader(true, "Preparing upload");
   try {
-    const data = await api("/api/extract", { method: "POST", body: formData });
+    const data = await uploadExtraction(formData);
     rows = data.rows || [];
     renderTable();
     toast(`Extracted ${rows.length} PDF${rows.length === 1 ? "" : "s"}`);
