@@ -4,11 +4,9 @@ import hashlib
 import hmac
 import os
 import re
-import signal
 import secrets
 import smtplib
 import tempfile
-from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from pathlib import Path
@@ -18,7 +16,7 @@ import jwt
 import requests
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, VerificationError
-from flask import Flask, jsonify, make_response, render_template, request
+from flask import Flask, current_app, jsonify, make_response, render_template, request
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 from sqlalchemy import func
@@ -26,6 +24,7 @@ from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from werkzeug.utils import secure_filename
 
 from booking_extractor import export_booking_data
+from outlook_mail import OutlookMailError, outlook_graph_configured, send_graph_email
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -119,25 +118,6 @@ def database_uri() -> str:
     elif raw.startswith("postgresql://") and "+psycopg" not in raw:
         raw = raw.replace("postgresql://", "postgresql+psycopg://", 1)
     return raw
-
-
-@contextmanager
-def hard_timeout(seconds: int, message: str):
-    if not hasattr(signal, "SIGALRM"):
-        yield
-        return
-
-    def timeout_handler(_signum, _frame):
-        raise TimeoutError(message)
-
-    previous_handler = signal.getsignal(signal.SIGALRM)
-    try:
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.setitimer(signal.ITIMER_REAL, seconds)
-        yield
-    finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, previous_handler)
 
 
 def sqlalchemy_engine_options(uri: str) -> dict[str, int | bool]:
@@ -242,6 +222,20 @@ def admin_required():
 
 
 def send_otp_email(email: str, otp: str) -> None:
+    subject = "Your Movanta login code"
+    text_body = (
+        f"Your Movanta one-time password is {otp}.\n\n"
+        f"This code expires in {OTP_TTL_MINUTES} minutes."
+    )
+    html_body = f"""
+        <div style="font-family:Arial,sans-serif;line-height:1.5">
+          <h2>Movanta login code</h2>
+          <p>Your one-time password is:</p>
+          <p style="font-size:28px;font-weight:700;letter-spacing:6px">{otp}</p>
+          <p>This code expires in {OTP_TTL_MINUTES} minutes.</p>
+        </div>
+    """
+    provider = os.environ.get("EMAIL_PROVIDER", "auto").strip().lower()
     api_key = os.environ.get("EMAIL_SERVICE_API_KEY", "").strip()
     email_from = os.environ.get("EMAIL_FROM", "movantaa@outlook.com").strip()
     smtp_host = os.environ.get("SMTP_HOST", "").strip()
@@ -249,64 +243,60 @@ def send_otp_email(email: str, otp: str) -> None:
     smtp_timeout = int(os.environ.get("SMTP_TIMEOUT_SECONDS", "8"))
     smtp_username = os.environ.get("SMTP_USERNAME", "").strip()
     smtp_password = os.environ.get("SMTP_PASSWORD", "").strip()
+    allow_legacy_smtp = os.environ.get("ALLOW_LEGACY_SMTP", "false").lower() == "true"
 
-    if smtp_host and smtp_username and smtp_password:
-        message = EmailMessage()
-        message["Subject"] = "Your Movanta login code"
-        message["From"] = email_from
-        message["To"] = email
-        message.set_content(
-            f"Your Movanta one-time password is {otp}.\n\n"
-            f"This code expires in {OTP_TTL_MINUTES} minutes."
+    if provider in {"outlook_graph", "graph", "microsoft_graph"} and not outlook_graph_configured():
+        raise RuntimeError("Outlook Graph is selected but OUTLOOK_GRAPH_CLIENT_ID and token credentials are not configured.")
+
+    if provider in {"auto", "outlook_graph", "graph", "microsoft_graph"} and outlook_graph_configured():
+        try:
+            send_graph_email(email, subject, text_body, html_body, logger=current_app.logger)
+            return
+        except OutlookMailError:
+            current_app.logger.exception("Outlook Graph OTP send failed")
+            if provider in {"outlook_graph", "graph", "microsoft_graph"}:
+                raise
+
+    if provider in {"auto", "resend"} and api_key:
+        response = requests.post(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "from": email_from,
+                "to": [email],
+                "subject": subject,
+                "html": html_body,
+            },
+            timeout=15,
         )
-        message.add_alternative(
-            f"""
-            <div style="font-family:Arial,sans-serif;line-height:1.5">
-              <h2>Movanta login code</h2>
-              <p>Your one-time password is:</p>
-              <p style="font-size:28px;font-weight:700;letter-spacing:6px">{otp}</p>
-              <p>This code expires in {OTP_TTL_MINUTES} minutes.</p>
-            </div>
-            """,
-            subtype="html",
-        )
-        with hard_timeout(smtp_timeout, f"SMTP connection timed out after {smtp_timeout} seconds"):
-            with smtplib.SMTP(smtp_host, smtp_port, timeout=smtp_timeout) as smtp:
-                smtp.ehlo()
-                smtp.starttls()
-                smtp.ehlo()
-                smtp.login(smtp_username, smtp_password)
-                smtp.send_message(message)
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            raise RuntimeError(f"Resend email send failed: {response.status_code} {response.text}") from exc
         return
 
-    if not api_key:
-        if os.environ.get("FLASK_ENV") == "production":
-            raise RuntimeError("Configure SMTP_* variables or EMAIL_SERVICE_API_KEY in production")
+    if provider == "smtp" or (provider == "auto" and allow_legacy_smtp and smtp_host and smtp_username and smtp_password):
+        message = EmailMessage()
+        message["Subject"] = subject
+        message["From"] = email_from
+        message["To"] = email
+        message.set_content(text_body)
+        message.add_alternative(html_body, subtype="html")
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=smtp_timeout) as smtp:
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.ehlo()
+            smtp.login(smtp_username, smtp_password)
+            smtp.send_message(message)
+        return
+
+    if os.environ.get("FLASK_ENV") != "production":
         print(f"[dev otp] {email}: {otp}", flush=True)
         return
 
-    response = requests.post(
-        "https://api.resend.com/emails",
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={
-            "from": email_from,
-            "to": [email],
-            "subject": "Your Movanta login code",
-            "html": f"""
-                <div style="font-family:Arial,sans-serif;line-height:1.5">
-                  <h2>Movanta login code</h2>
-                  <p>Your one-time password is:</p>
-                  <p style="font-size:28px;font-weight:700;letter-spacing:6px">{otp}</p>
-                  <p>This code expires in {OTP_TTL_MINUTES} minutes.</p>
-                </div>
-            """,
-        },
-        timeout=15,
-    )
-    try:
-        response.raise_for_status()
-    except requests.HTTPError as exc:
-        raise RuntimeError(f"Resend email send failed: {response.status_code} {response.text}") from exc
+    if smtp_host and smtp_username and smtp_password and not allow_legacy_smtp:
+        raise RuntimeError("Outlook SMTP password auth is disabled. Configure Outlook Graph or set ALLOW_LEGACY_SMTP=true.")
+    raise RuntimeError("Configure EMAIL_PROVIDER with Outlook Graph or Resend email settings.")
 
 
 def otp_rate_limited(email: str) -> bool:

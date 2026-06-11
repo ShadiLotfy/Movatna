@@ -52,13 +52,26 @@ Copy `.env.example` to `.env` for local development. Never commit `.env`.
 ADMIN_EMAIL=your-admin-email@example.com
 ADMIN_PASSWORD=long-random-admin-bootstrap-secret
 DATABASE_URL=sqlite:///instance/movanta.sqlite3
+EMAIL_PROVIDER=outlook_graph
 EMAIL_SERVICE_API_KEY=
 EMAIL_FROM=movantaa@outlook.com
+OUTLOOK_GRAPH_TENANT_ID=consumers
+OUTLOOK_GRAPH_CLIENT_ID=
+OUTLOOK_GRAPH_CLIENT_SECRET=
+OUTLOOK_GRAPH_REFRESH_TOKEN=
+OUTLOOK_GRAPH_SCOPES=offline_access https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/Mail.Read
+OUTLOOK_GRAPH_MAILBOX=movantaa@outlook.com
+OUTLOOK_GRAPH_TIMEOUT_SECONDS=10
+OUTLOOK_GRAPH_RETRIES=3
+OUTLOOK_GRAPH_FOLDER=inbox
+OUTLOOK_GRAPH_POLL_SECONDS=30
+OUTLOOK_GRAPH_POLL_INTERVAL_SECONDS=5
 SMTP_HOST=smtp-mail.outlook.com
 SMTP_PORT=587
 SMTP_TIMEOUT_SECONDS=8
 SMTP_USERNAME=movantaa@outlook.com
 SMTP_PASSWORD=outlook-app-password-or-smtp-password
+ALLOW_LEGACY_SMTP=false
 JWT_SECRET=64-character-random-secret
 COOKIE_SECURE=false
 FLASK_ENV=development
@@ -110,33 +123,73 @@ python app.py
 
 Open `http://localhost:7823`.
 
-In development, if `EMAIL_SERVICE_API_KEY` is empty, OTP codes are printed in the terminal. In production, set the email key.
+In development, if no email provider is configured, OTP codes are printed in the terminal. In production, set `EMAIL_PROVIDER=outlook_graph` with Microsoft Graph credentials, or use a verified Resend sender.
 
 ## Email Sending
 
-The app can send OTPs in either of two ways.
+The app can send OTPs through Microsoft Graph, Resend, or explicitly enabled legacy SMTP.
 
-### Option A: Outlook SMTP
+### Option A: Outlook Microsoft Graph
 
 Use `movantaa@outlook.com` as the sender:
 
 ```env
+EMAIL_PROVIDER=outlook_graph
+EMAIL_FROM=movantaa@outlook.com
+OUTLOOK_GRAPH_TENANT_ID=consumers
+OUTLOOK_GRAPH_CLIENT_ID=your-microsoft-app-client-id
+OUTLOOK_GRAPH_CLIENT_SECRET=your-microsoft-app-client-secret-if-confidential-client
+OUTLOOK_GRAPH_REFRESH_TOKEN=your-delegated-refresh-token
+OUTLOOK_GRAPH_SCOPES=offline_access https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/Mail.Read
+OUTLOOK_GRAPH_MAILBOX=movantaa@outlook.com
+OUTLOOK_GRAPH_TIMEOUT_SECONDS=10
+OUTLOOK_GRAPH_RETRIES=3
+```
+
+The Microsoft app must have delegated `Mail.Send`. Add delegated `Mail.Read` only if you use mailbox polling. Request `offline_access` when obtaining the refresh token so the server can refresh tokens without an interactive login.
+
+To test Outlook OTP extraction locally without network:
+
+```bash
+python scripts/test_outlook_otp.py --samples
+```
+
+To send a test OTP through Outlook Graph:
+
+```bash
+python scripts/test_outlook_otp.py --send user@example.com
+```
+
+To poll the Outlook mailbox for the newest OTP email:
+
+```bash
+python scripts/test_outlook_otp.py --poll --timeout 30
+```
+
+### Option B: Legacy Outlook SMTP
+
+SMTP password authentication is disabled by default because it was timing out on Render. Outlook.com mail apps require Modern Auth/OAuth2, so Microsoft Graph is the production path. Only enable SMTP if your host can reach Microsoft SMTP and you explicitly want the legacy fallback:
+
+```env
+EMAIL_PROVIDER=smtp
 EMAIL_FROM=movantaa@outlook.com
 SMTP_HOST=smtp-mail.outlook.com
 SMTP_PORT=587
 SMTP_TIMEOUT_SECONDS=8
 SMTP_USERNAME=movantaa@outlook.com
 SMTP_PASSWORD=your-outlook-app-password
+ALLOW_LEGACY_SMTP=true
 ```
 
-Use an Outlook app password if multi-factor authentication is enabled. Do not commit this password.
+Do not commit this password.
 
-### Option B: Resend API
+### Option C: Resend API
 
 1. Create a free account at [resend.com](https://resend.com).
 2. Create an API key.
-3. Set `EMAIL_SERVICE_API_KEY` to that key. Replace `re_xxxxxxxxx` with your real Resend API key.
-4. Set `EMAIL_FROM` to a verified sender. For a first test, use `onboarding@resend.dev`.
+3. Set `EMAIL_PROVIDER=resend`.
+4. Set `EMAIL_SERVICE_API_KEY` to that key. Replace `re_xxxxxxxxx` with your real Resend API key.
+5. Set `EMAIL_FROM` to a verified sender. For a first test, use `onboarding@resend.dev`.
 
 To test Resend locally:
 
@@ -144,7 +197,7 @@ To test Resend locally:
 python scripts/test_resend.py
 ```
 
-If neither SMTP nor Resend is configured in local development, OTPs are printed to the terminal/log file.
+If no email provider is configured in local development, OTPs are printed to the terminal/log file.
 
 ## Free Database Options
 
@@ -178,12 +231,20 @@ Render is the simplest free option for this project because it runs Python and t
    - `ADMIN_EMAIL`
    - `ADMIN_PASSWORD`
    - `DATABASE_URL`
+   - `EMAIL_PROVIDER`
    - `EMAIL_SERVICE_API_KEY`
    - `EMAIL_FROM`
+   - `OUTLOOK_GRAPH_TENANT_ID`
+   - `OUTLOOK_GRAPH_CLIENT_ID`
+   - `OUTLOOK_GRAPH_CLIENT_SECRET`
+   - `OUTLOOK_GRAPH_REFRESH_TOKEN`
+   - `OUTLOOK_GRAPH_MAILBOX`
    - `SMTP_HOST`
    - `SMTP_PORT`
+   - `SMTP_TIMEOUT_SECONDS`
    - `SMTP_USERNAME`
    - `SMTP_PASSWORD`
+   - `ALLOW_LEGACY_SMTP`
    - `JWT_SECRET`
    - `COOKIE_SECURE=true`
    - `FLASK_ENV=production`
@@ -268,7 +329,7 @@ CREATE INDEX ix_otp_challenges_email ON otp_challenges (email);
 
 1. Create a managed PostgreSQL database through Render, Neon, Supabase, AWS RDS, or DigitalOcean Managed Databases.
 2. Set `DATABASE_URL` to the provider connection string. The app accepts `postgres://`, `postgresql://`, and `postgresql+psycopg://` formats.
-3. Configure SMTP or Resend. In production, do not rely on console OTP output.
+3. Configure Outlook Graph or Resend. In production, do not rely on console OTP output.
 4. Generate `JWT_SECRET` with `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
 5. Set `ADMIN_EMAIL` to the exact administrator account and set a long random `ADMIN_PASSWORD`.
 6. Set `COOKIE_SECURE=true`, `FLASK_ENV=production`, and `PYTHON_ENV=production`.

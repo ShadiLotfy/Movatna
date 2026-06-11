@@ -22,10 +22,34 @@ services:
         sync: false
       - key: DB_POOL_RECYCLE_SECONDS
         value: "300"
+      - key: EMAIL_PROVIDER
+        value: outlook_graph
       - key: EMAIL_SERVICE_API_KEY
         sync: false
       - key: EMAIL_FROM
         sync: false
+      - key: OUTLOOK_GRAPH_TENANT_ID
+        value: consumers
+      - key: OUTLOOK_GRAPH_CLIENT_ID
+        sync: false
+      - key: OUTLOOK_GRAPH_CLIENT_SECRET
+        sync: false
+      - key: OUTLOOK_GRAPH_REFRESH_TOKEN
+        sync: false
+      - key: OUTLOOK_GRAPH_SCOPES
+        value: offline_access https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/Mail.Read
+      - key: OUTLOOK_GRAPH_MAILBOX
+        value: movantaa@outlook.com
+      - key: OUTLOOK_GRAPH_TIMEOUT_SECONDS
+        value: "10"
+      - key: OUTLOOK_GRAPH_RETRIES
+        value: "3"
+      - key: OUTLOOK_GRAPH_FOLDER
+        value: inbox
+      - key: OUTLOOK_GRAPH_POLL_SECONDS
+        value: "30"
+      - key: OUTLOOK_GRAPH_POLL_INTERVAL_SECONDS
+        value: "5"
       - key: SMTP_HOST
         value: smtp-mail.outlook.com
       - key: SMTP_PORT
@@ -36,5 +60,7 @@ services:
         value: movantaa@outlook.com
       - key: SMTP_PASSWORD
         sync: false
+      - key: ALLOW_LEGACY_SMTP
+        value: "false"
       - key: JWT_SECRET
         sync: false
