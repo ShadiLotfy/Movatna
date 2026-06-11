@@ -14,18 +14,22 @@ const schema = [
   "Gate In Cut Off (Calculated)",
 ];
 
-let pendingEmail = "";
+let currentUser = null;
 let rows = [];
+let users = [];
 
 const $ = (id) => document.getElementById(id);
+
+function showLoader(show) {
+  $("loader").classList.toggle("hidden", !show);
+}
 
 function toast(message, isError = false) {
   const el = $("toast");
   el.textContent = message;
-  el.classList.toggle("border-red-500", isError);
-  el.classList.toggle("text-red-200", isError);
+  el.classList.toggle("error", isError);
   el.classList.remove("hidden");
-  setTimeout(() => el.classList.add("hidden"), 3500);
+  setTimeout(() => el.classList.add("hidden"), 3600);
 }
 
 async function api(path, options = {}) {
@@ -40,26 +44,26 @@ async function api(path, options = {}) {
 }
 
 function show(view) {
-  ["loginView", "otpView", "dashboardView"].forEach((id) => $(id).classList.add("hidden"));
+  ["loginView", "dashboardView"].forEach((id) => $(id).classList.add("hidden"));
   $(view).classList.remove("hidden");
 }
 
-function setLoginMode(mode) {
-  const isAdmin = mode === "admin";
-  $("emailForm").classList.toggle("hidden", isAdmin);
-  $("adminLoginForm").classList.toggle("hidden", !isAdmin);
-  $("userLoginTab").classList.toggle("active", !isAdmin);
-  $("adminLoginTab").classList.toggle("active", isAdmin);
-  $("loginHelp").textContent = isAdmin
-    ? "Admins sign in with email and password. Admin OTP login is disabled."
-    : "Enter your authorized email to receive a one-time password.";
+function openModal(id) {
+  $(id).classList.remove("hidden");
+}
+
+function closeModal(id) {
+  $(id).classList.add("hidden");
 }
 
 function setUser(user) {
+  currentUser = user;
   $("userBar").classList.remove("hidden");
-  $("userBar").classList.add("flex");
-  $("userEmail").textContent = user.email;
+  $("userIdentity").textContent = `${user.name || user.username} / ${user.role.toUpperCase()}`;
   $("adminTab").classList.toggle("hidden", !user.isAdmin);
+  $("uploadLimitNote").textContent = user.isAdmin
+    ? "Admin access: batch upload limit is unrestricted."
+    : `Upload limit: ${user.uploadLimit} PDFs per extraction.`;
 }
 
 function renderTable() {
@@ -73,15 +77,15 @@ function renderTable() {
 }
 
 function headerLabel(label) {
-  const cutLabels = {
-    "SI & VGM Cut Off (Calculated)": ["SI & VGM Cut Off", "calculated"],
-    "Assigning Cut Off (Calculated)": ["Assigning Cut Off", "calculated"],
-    "Gate In Cut Off (Calculated)": ["Gate In Cut Off", "calculated"],
+  const labels = {
+    "SI & VGM Cut Off (Calculated)": ["SI & VGM Cut Off", "Calculated"],
+    "Assigning Cut Off (Calculated)": ["Assigning Cut Off", "Calculated"],
+    "Gate In Cut Off (Calculated)": ["Gate In Cut Off", "Calculated"],
     "ETS POL / Sailing Date": ["ETS POL", "Sailing Date"],
     "ETA POD / Arrival Date": ["ETA POD", "Arrival Date"],
   };
-  if (!cutLabels[label]) return escapeHtml(label);
-  const [main, sub] = cutLabels[label];
+  if (!labels[label]) return escapeHtml(label);
+  const [main, sub] = labels[label];
   return `${escapeHtml(main)}<span class="th-sub">${escapeHtml(sub)}</span>`;
 }
 
@@ -140,7 +144,6 @@ async function copyHtml(html) {
     await navigator.clipboard.write([new ClipboardItem({ "text/html": htmlBlob, "text/plain": textBlob })]);
     return;
   }
-
   const el = document.createElement("div");
   el.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0;";
   el.innerHTML = html;
@@ -163,7 +166,6 @@ function renderEmailCards() {
     grid.innerHTML = "";
     return;
   }
-
   section.classList.remove("hidden");
   grid.innerHTML = rows
     .map((row, index) => {
@@ -184,8 +186,8 @@ function renderEmailCards() {
           </div>
           <table class="ec-table">${tableRows}</table>
           <div class="ec-foot">
-            <button class="email-action bg-blue-600 font-semibold hover:bg-blue-500" type="button" data-copy-email="${index}">Copy for email</button>
-            <button class="email-action border border-slate-700 hover:bg-slate-800" type="button" data-preview-email="${index}">Preview</button>
+            <button class="email-action primary-mini" type="button" data-copy-email="${index}">Copy for Email</button>
+            <button class="email-action" type="button" data-preview-email="${index}">Preview</button>
           </div>
         </div>`;
     })
@@ -203,63 +205,51 @@ async function bootstrap() {
   }
 }
 
-$("emailForm").addEventListener("submit", async (event) => {
+$("loginForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  pendingEmail = $("emailInput").value.trim().toLowerCase();
+  showLoader(true);
   try {
-    await api("/api/auth/request-otp", {
-      method: "POST",
-      body: JSON.stringify({ email: pendingEmail }),
-    });
-    $("otpEmail").textContent = pendingEmail;
-    show("otpView");
-    toast("OTP sent");
-  } catch (error) {
-    toast(error.message, true);
-  }
-});
-
-$("adminLoginForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  try {
-    const { user } = await api("/api/auth/admin-login", {
+    const { user } = await api("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({
-        email: $("adminEmailInput").value.trim().toLowerCase(),
-        password: $("adminPasswordInput").value,
+        identifier: $("loginIdentifier").value.trim().toLowerCase(),
+        password: $("loginPassword").value,
       }),
     });
-    $("adminPasswordInput").value = "";
+    $("loginPassword").value = "";
     setUser(user);
     show("dashboardView");
-    toast("Logged in");
+    toast("Signed in");
   } catch (error) {
     toast(error.message, true);
+  } finally {
+    showLoader(false);
   }
 });
-
-$("otpForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  try {
-    const { user } = await api("/api/auth/verify-otp", {
-      method: "POST",
-      body: JSON.stringify({ email: pendingEmail, otp: $("otpInput").value.trim() }),
-    });
-    setUser(user);
-    show("dashboardView");
-    toast("Logged in");
-  } catch (error) {
-    toast(error.message, true);
-  }
-});
-
-$("userLoginTab").addEventListener("click", () => setLoginMode("user"));
-$("adminLoginTab").addEventListener("click", () => setLoginMode("admin"));
-$("backToEmail").addEventListener("click", () => show("loginView"));
 
 $("logoutBtn").addEventListener("click", async () => {
   await api("/api/auth/logout", { method: "POST" });
   location.reload();
+});
+
+$("changePasswordBtn").addEventListener("click", () => openModal("changePasswordModal"));
+
+$("changePasswordForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await api("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({
+        currentPassword: $("currentPassword").value,
+        newPassword: $("newPassword").value,
+      }),
+    });
+    $("changePasswordForm").reset();
+    closeModal("changePasswordModal");
+    toast("Password updated");
+  } catch (error) {
+    toast(error.message, true);
+  }
 });
 
 $("uploadForm").addEventListener("submit", async (event) => {
@@ -268,6 +258,7 @@ $("uploadForm").addEventListener("submit", async (event) => {
   if (!files.length) return toast("Choose at least one PDF", true);
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
+  showLoader(true);
   try {
     const data = await api("/api/extract", { method: "POST", body: formData });
     rows = data.rows || [];
@@ -275,6 +266,8 @@ $("uploadForm").addEventListener("submit", async (event) => {
     toast(`Extracted ${rows.length} PDF${rows.length === 1 ? "" : "s"}`);
   } catch (error) {
     toast(error.message, true);
+  } finally {
+    showLoader(false);
   }
 });
 
@@ -328,6 +321,11 @@ $("copyAllBtn").addEventListener("click", async () => {
   toast("Table copied");
 });
 
+function csvCell(value) {
+  const text = String(value).replaceAll('"', '""');
+  return /[",\n]/.test(text) ? `"${text}"` : text;
+}
+
 $("emailGrid").addEventListener("click", async (event) => {
   const copyButton = event.target.closest("[data-copy-email]");
   const previewButton = event.target.closest("[data-preview-email]");
@@ -341,36 +339,26 @@ $("emailGrid").addEventListener("click", async (event) => {
   if (copyButton) {
     try {
       await copyHtml(html);
-      toast("Copied! Paste into Outlook or Gmail");
+      toast("Copied for email");
     } catch {
-      toast("Copy failed. Use Preview to copy manually.", true);
+      toast("Copy failed. Use Preview.", true);
     }
     return;
   }
 
   $("modalPreview").innerHTML = html;
   $("modalTitle").textContent = `Booking ${rowValue(row, "Booking No.") || "-"}`;
-  $("modalOverlay").classList.add("show");
+  openModal("emailCopyModal");
   $("modalCopyBtn").onclick = async () => {
     try {
       await copyHtml(html);
-      $("modalOverlay").classList.remove("show");
-      toast("Copied!");
+      closeModal("emailCopyModal");
+      toast("Copied");
     } catch {
       toast("Copy failed", true);
     }
   };
 });
-
-$("modalClose").addEventListener("click", () => $("modalOverlay").classList.remove("show"));
-$("modalOverlay").addEventListener("click", (event) => {
-  if (event.target === $("modalOverlay")) $("modalOverlay").classList.remove("show");
-});
-
-function csvCell(value) {
-  const text = String(value).replaceAll('"', '""');
-  return /[",\n]/.test(text) ? `"${text}"` : text;
-}
 
 $("dashboardTab").addEventListener("click", () => setTab("dashboard"));
 $("adminTab").addEventListener("click", async () => {
@@ -387,50 +375,142 @@ function setTab(tab) {
 
 async function loadUsers() {
   try {
-    const { users } = await api("/api/admin/users");
-    $("userList").innerHTML = users
-      .map(
-        (user) => `
-          <div class="flex items-center justify-between gap-3 px-4 py-3">
-            <div>
-              <div class="font-medium">${escapeHtml(user.email)}</div>
-              <div class="text-xs text-slate-500">${user.isAdmin ? "Admin" : "User"} · ${user.isActive ? "Active" : "Revoked"}</div>
-            </div>
-            ${user.isAdmin ? "" : `<button class="rounded-md border border-red-500/60 px-3 py-2 text-sm text-red-200 hover:bg-red-950" data-delete="${user.id}">Revoke</button>`}
-          </div>
-        `
-      )
-      .join("");
+    const data = await api("/api/admin/users");
+    users = data.users || [];
+    renderUsers();
   } catch (error) {
     toast(error.message, true);
   }
 }
 
-$("addUserForm").addEventListener("submit", async (event) => {
+function renderUsers() {
+  $("userList").innerHTML = users
+    .map((user) => {
+      const created = user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "-";
+      const status = user.isDeleted ? "Deleted" : user.isActive ? "Active" : "Disabled";
+      return `
+        <tr>
+          <td>
+            <strong>${escapeHtml(user.name || "-")}</strong>
+            <span>${escapeHtml(user.email)}</span>
+            <small>@${escapeHtml(user.username)}</small>
+          </td>
+          <td>${escapeHtml(user.role)}</td>
+          <td>${escapeHtml(user.uploadLimit)}</td>
+          <td><span class="status-pill ${status.toLowerCase()}">${status}</span></td>
+          <td>${created}</td>
+          <td>
+            <div class="action-row">
+              <button class="ghost-btn" data-edit-user="${user.id}" type="button">Edit</button>
+              <button class="ghost-btn" data-reset-user="${user.id}" type="button">Reset</button>
+              <button class="ghost-btn danger" data-delete-user="${user.id}" type="button">Delete</button>
+            </div>
+          </td>
+        </tr>`;
+    })
+    .join("");
+}
+
+$("openCreateUserBtn").addEventListener("click", () => openModal("createUserModal"));
+
+$("createUserForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
-    await api("/api/admin/users", {
+    const data = await api("/api/admin/users", {
       method: "POST",
-      body: JSON.stringify({ email: $("newUserEmail").value.trim().toLowerCase() }),
+      body: JSON.stringify({
+        name: $("newUserName").value.trim(),
+        email: $("newUserEmail").value.trim().toLowerCase(),
+        username: $("newUsername").value.trim().toLowerCase(),
+        role: $("newUserRole").value,
+        uploadLimit: Number($("newUserUploadLimit").value),
+      }),
     });
-    $("newUserEmail").value = "";
+    $("createUserForm").reset();
+    $("newUserUploadLimit").value = "25";
+    closeModal("createUserModal");
     await loadUsers();
-    toast("User added");
+    showGeneratedPassword(data.generatedPassword, `Password for ${data.user.username}`);
   } catch (error) {
     toast(error.message, true);
   }
 });
 
 $("userList").addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-delete]");
-  if (!button) return;
+  const edit = event.target.closest("[data-edit-user]");
+  const reset = event.target.closest("[data-reset-user]");
+  const del = event.target.closest("[data-delete-user]");
+  if (edit) {
+    const user = users.find((item) => item.id === Number(edit.dataset.editUser));
+    if (!user) return;
+    $("editUserId").value = user.id;
+    $("editUserName").value = user.name || "";
+    $("editUserRole").value = user.role;
+    $("editUserUploadLimit").value = user.uploadLimit;
+    $("editUserActive").checked = user.isActive;
+    openModal("editUserModal");
+  }
+  if (reset) {
+    if (!confirm("Reset this user's password?")) return;
+    try {
+      const data = await api(`/api/admin/users/${reset.dataset.resetUser}/reset-password`, { method: "POST" });
+      await loadUsers();
+      showGeneratedPassword(data.generatedPassword, `Reset password for ${data.user.username}`);
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+  if (del) {
+    if (!confirm("Delete this user?")) return;
+    try {
+      await api(`/api/admin/users/${del.dataset.deleteUser}`, { method: "DELETE" });
+      await loadUsers();
+      toast("User deleted");
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+});
+
+$("editUserForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
   try {
-    await api(`/api/admin/users/${button.dataset.delete}`, { method: "DELETE" });
+    await api(`/api/admin/users/${$("editUserId").value}`, {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: $("editUserName").value.trim(),
+        role: $("editUserRole").value,
+        uploadLimit: Number($("editUserUploadLimit").value),
+        isActive: $("editUserActive").checked,
+      }),
+    });
+    closeModal("editUserModal");
     await loadUsers();
-    toast("User revoked");
+    toast("User updated");
   } catch (error) {
     toast(error.message, true);
   }
+});
+
+function showGeneratedPassword(password, title) {
+  $("passwordModalTitle").textContent = title;
+  $("generatedPassword").textContent = password;
+  openModal("passwordModal");
+}
+
+$("copyGeneratedPasswordBtn").addEventListener("click", async () => {
+  await navigator.clipboard.writeText($("generatedPassword").textContent);
+  toast("Password copied");
+});
+
+document.querySelectorAll("[data-close-modal]").forEach((button) => {
+  button.addEventListener("click", () => closeModal(button.dataset.closeModal));
+});
+
+document.querySelectorAll(".modal-overlay").forEach((modal) => {
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) closeModal(modal.id);
+  });
 });
 
 bootstrap();

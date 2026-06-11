@@ -1,42 +1,37 @@
 from __future__ import annotations
 
-import hashlib
-import hmac
 import os
 import re
 import secrets
-import smtplib
+import string
 import tempfile
 from datetime import datetime, timedelta, timezone
-from email.message import EmailMessage
 from pathlib import Path
 from urllib.parse import urlparse
 
 import jwt
-import requests
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError, VerificationError
-from flask import Flask, current_app, jsonify, make_response, render_template, request
-from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
-from sqlalchemy import func
+from flask import Flask, jsonify, make_response, render_template, request
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import func, inspect, text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from werkzeug.utils import secure_filename
 
 from booking_extractor import export_booking_data
-from outlook_mail import OutlookMailError, outlook_graph_configured, send_graph_email
 
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
-OTP_TTL_MINUTES = 5
 SESSION_TTL_MINUTES = 30
 MAX_CONTENT_LENGTH = 20 * 1024 * 1024
-OTP_RATE_LIMIT: dict[str, list[datetime]] = {}
-OTP_VERIFY_RATE_LIMIT: dict[str, list[datetime]] = {}
+DEFAULT_UPLOAD_LIMIT = 25
 GLOBAL_RATE_LIMIT: dict[str, list[datetime]] = {}
-ADMIN_LOGIN_RATE_LIMIT: dict[str, list[datetime]] = {}
+LOGIN_RATE_LIMIT: dict[str, list[datetime]] = {}
 EMAIL_RE = re.compile(r"^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,254}$", re.IGNORECASE)
+USERNAME_RE = re.compile(r"^[a-zA-Z0-9._-]{3,64}$")
+ROLE_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]{1,31}$")
 PASSWORD_HASHER = PasswordHasher(time_cost=3, memory_cost=65536, parallelism=2, hash_len=32, salt_len=16)
 
 db = SQLAlchemy()
@@ -47,39 +42,46 @@ class AuthorizedUser(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    username = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    full_name = db.Column(db.String(120), nullable=False, default="")
+    role = db.Column(db.String(32), nullable=False, default="user")
     is_admin = db.Column(db.Boolean, default=False, nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
-    admin_password_hash = db.Column(db.String(255), nullable=True)
+    is_deleted = db.Column(db.Boolean, default=False, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    upload_limit = db.Column(db.Integer, default=DEFAULT_UPLOAD_LIMIT, nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: utcnow(), nullable=False)
-
-
-class OtpChallenge(db.Model):
-    __tablename__ = "otp_challenges"
-
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(255), nullable=False, index=True)
-    otp_hash = db.Column(db.String(128), nullable=False)
-    expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
-    attempts = db.Column(db.Integer, default=0, nullable=False)
-    created_at = db.Column(db.DateTime(timezone=True), default=lambda: utcnow(), nullable=False)
+    updated_at = db.Column(db.DateTime(timezone=True), default=lambda: utcnow(), onupdate=lambda: utcnow(), nullable=False)
+    password_changed_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def as_utc(value: datetime) -> datetime:
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
-
-
 def normalize_email(email: str) -> str:
     return (email or "").strip().lower()
 
 
+def normalize_username(username: str) -> str:
+    return (username or "").strip().lower()
+
+
+def clean_name(name: str) -> str:
+    return re.sub(r"\s+", " ", (name or "").strip())[:120]
+
+
+def clean_role(role: str) -> str:
+    role = (role or "user").strip().lower()
+    return role if ROLE_RE.fullmatch(role) else ""
+
+
 def is_valid_email(email: str) -> bool:
     return bool(email and len(email) <= 255 and EMAIL_RE.fullmatch(email))
+
+
+def is_valid_username(username: str) -> bool:
+    return bool(USERNAME_RE.fullmatch(username or ""))
 
 
 def clean_password(password: str) -> str:
@@ -100,6 +102,19 @@ def verify_password(password_hash: str | None, password: str) -> bool:
         return PASSWORD_HASHER.verify(password_hash, password)
     except (VerifyMismatchError, VerificationError, ValueError, TypeError):
         return False
+
+
+def generate_password(length: int = 18) -> str:
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*()-_=+"
+    while True:
+        password = "".join(secrets.choice(alphabet) for _ in range(length))
+        if (
+            any(c.islower() for c in password)
+            and any(c.isupper() for c in password)
+            and any(c.isdigit() for c in password)
+            and any(c in "!@#$%^&*()-_=+" for c in password)
+        ):
+            return password
 
 
 def require_env(name: str) -> str:
@@ -144,6 +159,7 @@ def create_app() -> Flask:
 
     with app.app_context():
         db.create_all()
+        ensure_user_schema()
         ensure_admin_user()
 
     register_security_hooks(app)
@@ -152,30 +168,110 @@ def create_app() -> Flask:
     return app
 
 
+def ensure_user_schema() -> None:
+    inspector = inspect(db.engine)
+    columns = {column["name"] for column in inspector.get_columns("authorized_users")}
+    dialect = db.engine.dialect.name
+
+    def add_column(name: str, definition: str) -> None:
+        if name not in columns:
+            db.session.execute(text(f"ALTER TABLE authorized_users ADD COLUMN {name} {definition}"))
+
+    if dialect == "postgresql":
+        add_column("username", "VARCHAR(64)")
+        add_column("full_name", "VARCHAR(120) DEFAULT ''")
+        add_column("role", "VARCHAR(32) DEFAULT 'user'")
+        add_column("is_deleted", "BOOLEAN DEFAULT FALSE")
+        add_column("password_hash", "VARCHAR(255)")
+        add_column("upload_limit", f"INTEGER DEFAULT {DEFAULT_UPLOAD_LIMIT}")
+        add_column("updated_at", "TIMESTAMP WITH TIME ZONE")
+        add_column("password_changed_at", "TIMESTAMP WITH TIME ZONE")
+    else:
+        add_column("username", "VARCHAR(64)")
+        add_column("full_name", "VARCHAR(120) DEFAULT ''")
+        add_column("role", "VARCHAR(32) DEFAULT 'user'")
+        add_column("is_deleted", "BOOLEAN DEFAULT 0")
+        add_column("password_hash", "VARCHAR(255)")
+        add_column("upload_limit", f"INTEGER DEFAULT {DEFAULT_UPLOAD_LIMIT}")
+        add_column("updated_at", "DATETIME")
+        add_column("password_changed_at", "DATETIME")
+
+    db.session.commit()
+    now = utcnow()
+    for user in AuthorizedUser.query.all():
+        changed = False
+        if not user.username:
+            user.username = unique_username_from_email(user.email)
+            changed = True
+        if user.full_name is None:
+            user.full_name = ""
+            changed = True
+        if not user.role:
+            user.role = "admin" if user.is_admin else "user"
+            changed = True
+        if user.is_deleted is None:
+            user.is_deleted = False
+            changed = True
+        if user.upload_limit is None:
+            user.upload_limit = DEFAULT_UPLOAD_LIMIT
+            changed = True
+        if not user.updated_at:
+            user.updated_at = now
+            changed = True
+        if not user.password_hash:
+            user.password_hash = hash_password(generate_password())
+            changed = True
+        if user.is_admin and user.role != "admin":
+            user.role = "admin"
+            changed = True
+        if changed:
+            db.session.add(user)
+    db.session.commit()
+
+
+def unique_username_from_email(email: str) -> str:
+    base = re.sub(r"[^a-zA-Z0-9._-]+", "", (email or "user").split("@", 1)[0]).lower() or "user"
+    base = base[:48]
+    candidate = base
+    suffix = 1
+    while AuthorizedUser.query.filter(func.lower(AuthorizedUser.username) == candidate).first():
+        suffix += 1
+        candidate = f"{base[:48]}{suffix}"
+    return candidate
+
+
 def ensure_admin_user() -> None:
     admin_email = normalize_email(require_env("ADMIN_EMAIL"))
     admin_password = require_env("ADMIN_PASSWORD")
     user = AuthorizedUser.query.filter(func.lower(AuthorizedUser.email) == admin_email).first()
     password_hash = hash_password(admin_password)
+    username = normalize_username(os.environ.get("ADMIN_USERNAME", "")) or unique_username_from_email(admin_email)
     if user:
+        user.username = user.username or username
+        user.full_name = user.full_name or "Movanta Admin"
+        user.role = "admin"
         user.is_admin = True
         user.is_active = True
-        user.admin_password_hash = password_hash
+        user.is_deleted = False
+        user.password_hash = password_hash
+        user.upload_limit = max(user.upload_limit or DEFAULT_UPLOAD_LIMIT, DEFAULT_UPLOAD_LIMIT)
+        user.updated_at = utcnow()
     else:
         db.session.add(
             AuthorizedUser(
                 email=admin_email,
+                username=username,
+                full_name="Movanta Admin",
+                role="admin",
                 is_admin=True,
                 is_active=True,
-                admin_password_hash=password_hash,
+                is_deleted=False,
+                password_hash=password_hash,
+                upload_limit=DEFAULT_UPLOAD_LIMIT,
+                password_changed_at=utcnow(),
             )
         )
     db.session.commit()
-
-
-def otp_digest(email: str, otp: str) -> str:
-    secret = require_env("JWT_SECRET").encode("utf-8")
-    return hmac.new(secret, f"{email}:{otp}".encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 def session_token(user: AuthorizedUser) -> str:
@@ -183,6 +279,8 @@ def session_token(user: AuthorizedUser) -> str:
     payload = {
         "sub": str(user.id),
         "email": user.email,
+        "username": user.username,
+        "role": user.role,
         "is_admin": bool(user.is_admin),
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(minutes=SESSION_TTL_MINUTES)).timestamp()),
@@ -199,7 +297,7 @@ def current_user() -> AuthorizedUser | None:
     except jwt.PyJWTError:
         return None
     user = db.session.get(AuthorizedUser, int(payload.get("sub", "0")))
-    if not user or not user.is_active:
+    if not user or not user.is_active or user.is_deleted:
         return None
     return user
 
@@ -215,102 +313,14 @@ def admin_required():
     user, error = auth_required()
     if error:
         return None, error
-    admin_email = normalize_email(require_env("ADMIN_EMAIL"))
-    if not user.is_admin or normalize_email(user.email) != admin_email:
+    if not user.is_admin or user.role != "admin":
         return None, (jsonify({"error": "Admin access required"}), 403)
     return user, None
 
 
-def send_otp_email(email: str, otp: str) -> None:
-    subject = "Your Movanta login code"
-    text_body = (
-        f"Your Movanta one-time password is {otp}.\n\n"
-        f"This code expires in {OTP_TTL_MINUTES} minutes."
-    )
-    html_body = f"""
-        <div style="font-family:Arial,sans-serif;line-height:1.5">
-          <h2>Movanta login code</h2>
-          <p>Your one-time password is:</p>
-          <p style="font-size:28px;font-weight:700;letter-spacing:6px">{otp}</p>
-          <p>This code expires in {OTP_TTL_MINUTES} minutes.</p>
-        </div>
-    """
-    provider = os.environ.get("EMAIL_PROVIDER", "auto").strip().lower()
-    api_key = os.environ.get("EMAIL_SERVICE_API_KEY", "").strip()
-    email_from = os.environ.get("EMAIL_FROM", "movantaa@outlook.com").strip()
-    smtp_host = os.environ.get("SMTP_HOST", "").strip()
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-    smtp_timeout = int(os.environ.get("SMTP_TIMEOUT_SECONDS", "8"))
-    smtp_username = os.environ.get("SMTP_USERNAME", "").strip()
-    smtp_password = os.environ.get("SMTP_PASSWORD", "").strip()
-    allow_legacy_smtp = os.environ.get("ALLOW_LEGACY_SMTP", "false").lower() == "true"
-
-    if provider in {"outlook_graph", "graph", "microsoft_graph"} and not outlook_graph_configured():
-        raise RuntimeError("Outlook Graph is selected but OUTLOOK_GRAPH_CLIENT_ID and token credentials are not configured.")
-
-    if provider in {"auto", "outlook_graph", "graph", "microsoft_graph"} and outlook_graph_configured():
-        try:
-            send_graph_email(email, subject, text_body, html_body, logger=current_app.logger)
-            return
-        except OutlookMailError:
-            current_app.logger.exception("Outlook Graph OTP send failed")
-            if provider in {"outlook_graph", "graph", "microsoft_graph"}:
-                raise
-
-    if provider in {"auto", "resend"} and api_key:
-        response = requests.post(
-            "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "from": email_from,
-                "to": [email],
-                "subject": subject,
-                "html": html_body,
-            },
-            timeout=15,
-        )
-        try:
-            response.raise_for_status()
-        except requests.HTTPError as exc:
-            raise RuntimeError(f"Resend email send failed: {response.status_code} {response.text}") from exc
-        return
-
-    if provider == "smtp" or (provider == "auto" and allow_legacy_smtp and smtp_host and smtp_username and smtp_password):
-        message = EmailMessage()
-        message["Subject"] = subject
-        message["From"] = email_from
-        message["To"] = email
-        message.set_content(text_body)
-        message.add_alternative(html_body, subtype="html")
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=smtp_timeout) as smtp:
-            smtp.ehlo()
-            smtp.starttls()
-            smtp.ehlo()
-            smtp.login(smtp_username, smtp_password)
-            smtp.send_message(message)
-        return
-
-    if os.environ.get("FLASK_ENV") != "production":
-        print(f"[dev otp] {email}: {otp}", flush=True)
-        return
-
-    if smtp_host and smtp_username and smtp_password and not allow_legacy_smtp:
-        raise RuntimeError("Outlook SMTP password auth is disabled. Configure Outlook Graph or set ALLOW_LEGACY_SMTP=true.")
-    raise RuntimeError("Configure EMAIL_PROVIDER with Outlook Graph or Resend email settings.")
-
-
-def otp_rate_limited(email: str) -> bool:
-    return rate_limited(OTP_RATE_LIMIT, email, limit=3, window=timedelta(minutes=10))
-
-
-def otp_verify_rate_limited(email: str) -> bool:
-    key = f"{client_key()}:{email}"
-    return rate_limited(OTP_VERIFY_RATE_LIMIT, key, limit=5, window=timedelta(minutes=10))
-
-
-def admin_login_rate_limited(email: str) -> bool:
-    key = f"{client_key()}:{email}"
-    return rate_limited(ADMIN_LOGIN_RATE_LIMIT, key, limit=5, window=timedelta(minutes=15))
+def login_rate_limited(identifier: str) -> bool:
+    key = f"{client_key()}:{identifier}"
+    return rate_limited(LOGIN_RATE_LIMIT, key, limit=5, window=timedelta(minutes=15))
 
 
 def global_rate_limited() -> bool:
@@ -394,98 +404,46 @@ def register_routes(app: Flask) -> None:
     def health():
         return jsonify({"ok": True})
 
-    @app.post("/api/auth/request-otp")
-    def request_otp():
-        email = normalize_email((request.get_json(silent=True) or {}).get("email", ""))
-        if not is_valid_email(email):
-            return jsonify({"error": "Valid email is required"}), 400
-        if email == normalize_email(require_env("ADMIN_EMAIL")):
-            return jsonify({"error": "Admins must sign in with email and password"}), 400
-        user = AuthorizedUser.query.filter(func.lower(AuthorizedUser.email) == email, AuthorizedUser.is_active.is_(True)).first()
-        if not user:
-            return jsonify({"error": "This email is not authorized"}), 403
-        if user.is_admin:
-            return jsonify({"error": "Admins must sign in with email and password"}), 400
-        if otp_rate_limited(email):
-            return jsonify({"error": "Too many OTP requests. Try again later."}), 429
-
-        OtpChallenge.query.filter(func.lower(OtpChallenge.email) == email).delete()
-        otp = f"{secrets.randbelow(900000) + 100000}"
-        db.session.add(
-            OtpChallenge(
-                email=email,
-                otp_hash=otp_digest(email, otp),
-                expires_at=utcnow() + timedelta(minutes=OTP_TTL_MINUTES),
-            )
-        )
-        db.session.commit()
-        try:
-            send_otp_email(email, otp)
-        except Exception:
-            app.logger.exception("Failed to send OTP email to %s", email)
-            OtpChallenge.query.filter(func.lower(OtpChallenge.email) == email).delete()
-            db.session.commit()
-            return jsonify({"error": "Could not send OTP. Check email configuration and try again."}), 503
-        return jsonify({"ok": True, "message": "OTP sent"})
-
-    @app.post("/api/auth/verify-otp")
-    def verify_otp():
+    @app.post("/api/auth/login")
+    def login():
         payload = request.get_json(silent=True) or {}
-        email = normalize_email(payload.get("email", ""))
-        otp = str(payload.get("otp", "")).strip()
-        if not is_valid_email(email) or not re_fullmatch(r"\d{6}", otp):
-            return jsonify({"error": "Valid email and 6-digit OTP are required"}), 400
-        if otp_verify_rate_limited(email):
-            return jsonify({"error": "Too many OTP verification attempts. Request a new code later."}), 429
-
-        challenge = (
-            OtpChallenge.query.filter(func.lower(OtpChallenge.email) == email)
-            .order_by(OtpChallenge.created_at.desc())
-            .first()
-        )
-        if not challenge or as_utc(challenge.expires_at) < utcnow():
-            if challenge:
-                db.session.delete(challenge)
-                db.session.commit()
-            return jsonify({"error": "OTP expired. Request a new code."}), 400
-
-        otp_matches = hmac.compare_digest(challenge.otp_hash, otp_digest(email, otp))
-        db.session.delete(challenge)
-        if not otp_matches:
-            db.session.commit()
-            return jsonify({"error": "Invalid OTP"}), 400
-
-        user = AuthorizedUser.query.filter(func.lower(AuthorizedUser.email) == email, AuthorizedUser.is_active.is_(True)).first()
-        if not user or user.is_admin:
-            db.session.commit()
-            return jsonify({"error": "This email is not authorized"}), 403
-        db.session.commit()
-
-        response = make_response(jsonify({"ok": True, "user": public_user(user)}))
-        return set_session_cookie(response, session_token(user))
-
-    @app.post("/api/auth/admin-login")
-    def admin_login():
-        payload = request.get_json(silent=True) or {}
-        email = normalize_email(payload.get("email", ""))
+        identifier = normalize_username(str(payload.get("identifier", "")))
         password = clean_password(str(payload.get("password", "")))
-        if not is_valid_email(email) or not password:
-            return jsonify({"error": "Valid email and password are required"}), 400
-        if email != normalize_email(require_env("ADMIN_EMAIL")):
-            return jsonify({"error": "Invalid admin credentials"}), 401
-        if admin_login_rate_limited(email):
-            return jsonify({"error": "Too many admin login attempts. Try again later."}), 429
+        if not identifier or not password:
+            return jsonify({"error": "Email/username and password are required"}), 400
+        if login_rate_limited(identifier):
+            return jsonify({"error": "Too many login attempts. Try again later."}), 429
 
         user = AuthorizedUser.query.filter(
-            func.lower(AuthorizedUser.email) == email,
-            AuthorizedUser.is_admin.is_(True),
-            AuthorizedUser.is_active.is_(True),
+            (func.lower(AuthorizedUser.email) == identifier) | (func.lower(AuthorizedUser.username) == identifier)
         ).first()
-        if not user or not verify_password(user.admin_password_hash, password):
-            return jsonify({"error": "Invalid admin credentials"}), 401
+        if not user or user.is_deleted:
+            return jsonify({"error": "Invalid credentials"}), 401
+        if not user.is_active:
+            return jsonify({"error": "This account is disabled"}), 403
+        if not verify_password(user.password_hash, password):
+            return jsonify({"error": "Invalid credentials"}), 401
 
         response = make_response(jsonify({"ok": True, "user": public_user(user)}))
         return set_session_cookie(response, session_token(user))
+
+    @app.post("/api/auth/change-password")
+    def change_password():
+        user, error = auth_required()
+        if error:
+            return error
+        payload = request.get_json(silent=True) or {}
+        current_password = clean_password(str(payload.get("currentPassword", "")))
+        new_password = clean_password(str(payload.get("newPassword", "")))
+        if not verify_password(user.password_hash, current_password):
+            return jsonify({"error": "Current password is incorrect"}), 401
+        if not strong_password(new_password):
+            return jsonify({"error": "New password must be at least 12 characters with upper, lower, number, and symbol"}), 400
+        user.password_hash = hash_password(new_password)
+        user.password_changed_at = utcnow()
+        user.updated_at = utcnow()
+        db.session.commit()
+        return jsonify({"ok": True})
 
     @app.post("/api/auth/logout")
     def logout():
@@ -505,26 +463,101 @@ def register_routes(app: Flask) -> None:
         _, error = admin_required()
         if error:
             return error
-        users = AuthorizedUser.query.order_by(AuthorizedUser.email.asc()).all()
+        users = AuthorizedUser.query.order_by(AuthorizedUser.created_at.desc(), AuthorizedUser.email.asc()).all()
         return jsonify({"users": [public_user(u) for u in users]})
 
     @app.post("/api/admin/users")
-    def add_user():
+    def create_user():
         _, error = admin_required()
         if error:
             return error
-        email = normalize_email((request.get_json(silent=True) or {}).get("email", ""))
+        payload = request.get_json(silent=True) or {}
+        full_name = clean_name(str(payload.get("name", "")))
+        email = normalize_email(str(payload.get("email", "")))
+        username = normalize_username(str(payload.get("username", ""))) or unique_username_from_email(email)
+        role = clean_role(str(payload.get("role", "user")))
+        upload_limit = parse_upload_limit(payload.get("uploadLimit", DEFAULT_UPLOAD_LIMIT))
+        if not full_name:
+            return jsonify({"error": "Name is required"}), 400
         if not is_valid_email(email):
             return jsonify({"error": "Valid email is required"}), 400
-        existing = AuthorizedUser.query.filter(func.lower(AuthorizedUser.email) == email).first()
-        if existing:
-            existing.is_active = True
-            db.session.commit()
-            return jsonify({"user": public_user(existing)})
-        user = AuthorizedUser(email=email, is_admin=False, is_active=True)
+        if not is_valid_username(username):
+            return jsonify({"error": "Username must be 3-64 characters using letters, numbers, dot, dash, or underscore"}), 400
+        if not role:
+            return jsonify({"error": "Valid role is required"}), 400
+        if upload_limit is None:
+            return jsonify({"error": "Upload limit must be a number from 1 to 500"}), 400
+        existing_email = AuthorizedUser.query.filter(func.lower(AuthorizedUser.email) == email).first()
+        if existing_email:
+            return jsonify({"error": "Email already exists"}), 409
+        existing_username = AuthorizedUser.query.filter(func.lower(AuthorizedUser.username) == username).first()
+        if existing_username:
+            return jsonify({"error": "Username already exists"}), 409
+
+        generated_password = generate_password()
+        user = AuthorizedUser(
+            email=email,
+            username=username,
+            full_name=full_name,
+            role=role,
+            is_admin=role == "admin",
+            is_active=True,
+            is_deleted=False,
+            password_hash=hash_password(generated_password),
+            upload_limit=upload_limit,
+            password_changed_at=None,
+        )
         db.session.add(user)
         db.session.commit()
-        return jsonify({"user": public_user(user)}), 201
+        return jsonify({"user": public_user(user), "generatedPassword": generated_password}), 201
+
+    @app.patch("/api/admin/users/<int:user_id>")
+    def update_user(user_id: int):
+        _, error = admin_required()
+        if error:
+            return error
+        user = db.session.get(AuthorizedUser, user_id)
+        if not user or user.is_deleted:
+            return jsonify({"error": "User not found"}), 404
+        payload = request.get_json(silent=True) or {}
+
+        if "name" in payload:
+            full_name = clean_name(str(payload.get("name", "")))
+            if not full_name:
+                return jsonify({"error": "Name is required"}), 400
+            user.full_name = full_name
+        if "role" in payload and not is_primary_admin(user):
+            role = clean_role(str(payload.get("role", "")))
+            if not role:
+                return jsonify({"error": "Valid role is required"}), 400
+            user.role = role
+            user.is_admin = role == "admin"
+        if "uploadLimit" in payload:
+            upload_limit = parse_upload_limit(payload.get("uploadLimit"))
+            if upload_limit is None:
+                return jsonify({"error": "Upload limit must be a number from 1 to 500"}), 400
+            user.upload_limit = upload_limit
+        if "isActive" in payload and not is_primary_admin(user):
+            user.is_active = bool(payload.get("isActive"))
+
+        user.updated_at = utcnow()
+        db.session.commit()
+        return jsonify({"user": public_user(user)})
+
+    @app.post("/api/admin/users/<int:user_id>/reset-password")
+    def reset_user_password(user_id: int):
+        _, error = admin_required()
+        if error:
+            return error
+        user = db.session.get(AuthorizedUser, user_id)
+        if not user or user.is_deleted:
+            return jsonify({"error": "User not found"}), 404
+        generated_password = generate_password()
+        user.password_hash = hash_password(generated_password)
+        user.password_changed_at = utcnow()
+        user.updated_at = utcnow()
+        db.session.commit()
+        return jsonify({"user": public_user(user), "generatedPassword": generated_password})
 
     @app.delete("/api/admin/users/<int:user_id>")
     def delete_user(user_id: int):
@@ -532,22 +565,26 @@ def register_routes(app: Flask) -> None:
         if error:
             return error
         user = db.session.get(AuthorizedUser, user_id)
-        if not user:
+        if not user or user.is_deleted:
             return jsonify({"error": "User not found"}), 404
-        if normalize_email(user.email) == normalize_email(require_env("ADMIN_EMAIL")):
+        if is_primary_admin(user):
             return jsonify({"error": "The primary admin cannot be deleted"}), 400
+        user.is_deleted = True
         user.is_active = False
+        user.updated_at = utcnow()
         db.session.commit()
         return jsonify({"ok": True})
 
     @app.post("/api/extract")
     def extract():
-        _, error = auth_required()
+        user, error = auth_required()
         if error:
             return error
         files = request.files.getlist("files")
         if not files:
             return jsonify({"error": "Upload at least one PDF"}), 400
+        if not user.is_admin and len(files) > user.upload_limit:
+            return jsonify({"error": f"Upload limit exceeded. You can upload up to {user.upload_limit} PDFs at once."}), 403
 
         temp_paths: list[Path] = []
         try:
@@ -573,19 +610,44 @@ def register_routes(app: Flask) -> None:
                     pass
 
 
-def re_fullmatch(pattern: str, value: str) -> bool:
-    import re
+def strong_password(password: str) -> bool:
+    return (
+        len(password) >= 12
+        and any(c.islower() for c in password)
+        and any(c.isupper() for c in password)
+        and any(c.isdigit() for c in password)
+        and any(not c.isalnum() for c in password)
+    )
 
-    return re.fullmatch(pattern, value or "") is not None
+
+def parse_upload_limit(value) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < 1 or parsed > 500:
+        return None
+    return parsed
+
+
+def is_primary_admin(user: AuthorizedUser) -> bool:
+    return normalize_email(user.email) == normalize_email(require_env("ADMIN_EMAIL"))
 
 
 def public_user(user: AuthorizedUser) -> dict:
     return {
         "id": user.id,
         "email": user.email,
+        "username": user.username,
+        "name": user.full_name,
+        "role": user.role,
         "isAdmin": bool(user.is_admin),
         "isActive": bool(user.is_active),
+        "isDeleted": bool(user.is_deleted),
+        "uploadLimit": int(user.upload_limit or DEFAULT_UPLOAD_LIMIT),
         "createdAt": user.created_at.isoformat() if user.created_at else None,
+        "updatedAt": user.updated_at.isoformat() if user.updated_at else None,
+        "passwordChangedAt": user.password_changed_at.isoformat() if user.password_changed_at else None,
     }
 
 

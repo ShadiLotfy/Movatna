@@ -3,138 +3,246 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Movanta Shipping Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Movanta Operations Console</title>
     <link rel="stylesheet" href="/static/styles.css" />
   </head>
-  <body class="min-h-screen bg-slate-950 text-slate-100">
-    <div class="min-h-screen">
-      <header class="border-b border-slate-800 bg-slate-950/90">
-        <div class="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
-          <div>
-            <div class="text-lg font-semibold tracking-wide">Movanta</div>
-            <div class="text-xs text-slate-400">Shipping extraction dashboard</div>
-          </div>
-          <div id="userBar" class="hidden items-center gap-3 text-sm text-slate-300">
-            <span id="userEmail"></span>
-            <button id="logoutBtn" class="rounded-md border border-slate-700 px-3 py-2 hover:bg-slate-900">Logout</button>
-          </div>
-        </div>
-      </header>
-
-      <main class="mx-auto max-w-7xl px-5 py-8">
-        <section id="loginView" class="mx-auto max-w-md rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-xl">
-          <h1 class="text-2xl font-semibold">Secure login</h1>
-          <p id="loginHelp" class="mt-2 text-sm text-slate-400">Enter your authorized email to receive a one-time password.</p>
-          <div class="mt-5 grid grid-cols-2 rounded-md border border-slate-800 bg-slate-950 p-1">
-            <button id="userLoginTab" type="button" class="login-mode-button active">User</button>
-            <button id="adminLoginTab" type="button" class="login-mode-button">Admin</button>
-          </div>
-          <form id="emailForm" class="mt-6 space-y-4">
-            <label class="block text-sm font-medium text-slate-300" for="emailInput">Email address</label>
-            <input id="emailInput" type="email" autocomplete="email" required class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-3 outline-none focus:border-blue-500" />
-            <button class="w-full rounded-md bg-blue-600 px-4 py-3 font-semibold hover:bg-blue-500">Send OTP</button>
-          </form>
-          <form id="adminLoginForm" class="mt-6 hidden space-y-4">
-            <div>
-              <label class="block text-sm font-medium text-slate-300" for="adminEmailInput">Admin email</label>
-              <input id="adminEmailInput" type="email" autocomplete="username" required class="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-3 outline-none focus:border-blue-500" />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-slate-300" for="adminPasswordInput">Password</label>
-              <input id="adminPasswordInput" type="password" autocomplete="current-password" required minlength="12" class="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-3 outline-none focus:border-blue-500" />
-            </div>
-            <button class="w-full rounded-md bg-blue-600 px-4 py-3 font-semibold hover:bg-blue-500">Sign in</button>
-          </form>
-        </section>
-
-        <section id="otpView" class="mx-auto hidden max-w-md rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-xl">
-          <h1 class="text-2xl font-semibold">Enter OTP</h1>
-          <p class="mt-2 text-sm text-slate-400">We sent a 6-digit code to <span id="otpEmail"></span>. It expires in 5 minutes.</p>
-          <form id="otpForm" class="mt-6 space-y-4">
-            <label class="block text-sm font-medium text-slate-300" for="otpInput">One-time password</label>
-            <input id="otpInput" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-3 text-center text-2xl tracking-[0.5em] outline-none focus:border-blue-500" />
-            <button class="w-full rounded-md bg-blue-600 px-4 py-3 font-semibold hover:bg-blue-500">Verify</button>
-          </form>
-          <button id="backToEmail" class="mt-4 text-sm text-slate-400 hover:text-slate-100">Use a different email</button>
-        </section>
-
-        <section id="dashboardView" class="hidden space-y-6">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h1 class="text-2xl font-semibold">Movanta Shipping Dashboard</h1>
-              <p class="mt-1 text-sm text-slate-400">Upload booking-confirmation PDFs and extract structured shipping data.</p>
-            </div>
-            <div class="flex rounded-md border border-slate-800 bg-slate-900 p-1">
-              <button id="dashboardTab" class="tab-button active">Dashboard</button>
-              <button id="adminTab" class="tab-button hidden">Admin Console</button>
-            </div>
-          </div>
-
-          <section id="extractPanel" class="space-y-5">
-            <div class="rounded-lg border border-slate-800 bg-slate-900 p-5">
-              <form id="uploadForm" class="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
-                <div>
-                  <label class="block text-sm font-medium text-slate-300" for="pdfInput">Booking PDFs</label>
-                  <input id="pdfInput" type="file" accept=".pdf,application/pdf" multiple class="mt-2 w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-3 text-sm" />
-                </div>
-                <button class="rounded-md bg-emerald-600 px-5 py-3 font-semibold hover:bg-emerald-500">Extract PDFs</button>
-              </form>
-            </div>
-
-            <div class="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
-              <div class="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-                <h2 class="font-semibold">Extracted data</h2>
-                <div class="flex flex-wrap gap-2">
-                  <button id="copyAllBtn" class="rounded-md border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800" disabled>Copy table</button>
-                  <button id="downloadCsvBtn" class="rounded-md border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800" disabled>Download CSV</button>
-                </div>
-              </div>
-              <div class="overflow-x-auto">
-                <table class="booking-table min-w-[1500px] text-left text-sm">
-                  <thead id="resultHead" class="bg-slate-950 text-xs uppercase tracking-wide text-slate-400"></thead>
-                  <tbody id="resultBody" class="divide-y divide-slate-800"></tbody>
-                </table>
-              </div>
-            </div>
-
-            <section id="emailSection" class="email-section hidden">
-              <div class="section-title">Email-ready vertical tables</div>
-              <div id="emailGrid" class="email-grid"></div>
-            </section>
-          </section>
-
-          <section id="adminPanel" class="hidden space-y-5">
-            <div class="rounded-lg border border-slate-800 bg-slate-900 p-5">
-              <h2 class="text-xl font-semibold">Admin Console</h2>
-              <p class="mt-1 text-sm text-slate-400">Manage authorized users. No public registration exists.</p>
-              <form id="addUserForm" class="mt-5 flex flex-col gap-3 sm:flex-row">
-                <input id="newUserEmail" type="email" required placeholder="new.user@example.com" class="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-3 outline-none focus:border-blue-500" />
-                <button class="rounded-md bg-blue-600 px-5 py-3 font-semibold hover:bg-blue-500">Add user</button>
-              </form>
-            </div>
-            <div class="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
-              <div class="border-b border-slate-800 px-4 py-3 font-semibold">Authorized users</div>
-              <div id="userList" class="divide-y divide-slate-800"></div>
-            </div>
-          </section>
-        </section>
-
-        <div id="toast" class="fixed bottom-5 right-5 hidden rounded-md border border-slate-700 bg-slate-900 px-4 py-3 text-sm shadow-xl"></div>
-      </main>
+  <body>
+    <div class="space-bg">
+      <div class="star-field"></div>
+      <div class="ocean-line"></div>
     </div>
 
-    <div id="modalOverlay" class="modal-overlay">
+    <div id="loader" class="loader hidden">
+      <div class="ship-track">
+        <div class="ship">
+          <span></span>
+        </div>
+      </div>
+    </div>
+
+    <header class="topbar">
+      <div>
+        <div class="brand">MOVANTA</div>
+        <div class="brand-sub">Shipping Extraction Console</div>
+      </div>
+      <div id="userBar" class="userbar hidden">
+        <span id="userIdentity"></span>
+        <button id="changePasswordBtn" class="ghost-btn" type="button">Change Password</button>
+        <button id="logoutBtn" class="ghost-btn" type="button">Logout</button>
+      </div>
+    </header>
+
+    <main class="app-shell">
+      <section id="loginView" class="auth-panel">
+        <div class="panel-kicker">Authorized Access</div>
+        <h1>Operations Login</h1>
+        <p>Use the password generated by an administrator. No email codes are required.</p>
+        <form id="loginForm" class="form-stack">
+          <label>
+            <span>Email or username</span>
+            <input id="loginIdentifier" autocomplete="username" required />
+          </label>
+          <label>
+            <span>Password</span>
+            <input id="loginPassword" type="password" autocomplete="current-password" required />
+          </label>
+          <button class="primary-btn" type="submit">Sign In</button>
+        </form>
+      </section>
+
+      <section id="dashboardView" class="dashboard hidden">
+        <div class="dashboard-head">
+          <div>
+            <div class="panel-kicker">Mission Control</div>
+            <h1>Booking Extraction</h1>
+          </div>
+          <nav class="tabs">
+            <button id="dashboardTab" class="tab-button active" type="button">Dashboard</button>
+            <button id="adminTab" class="tab-button hidden" type="button">Admin</button>
+          </nav>
+        </div>
+
+        <section id="extractPanel" class="panel-grid">
+          <div class="command-panel">
+            <form id="uploadForm" class="upload-form">
+              <label>
+                <span>Booking PDFs</span>
+                <input id="pdfInput" type="file" accept=".pdf,application/pdf" multiple />
+              </label>
+              <button class="primary-btn" type="submit">Extract PDFs</button>
+            </form>
+            <div id="uploadLimitNote" class="microcopy"></div>
+          </div>
+
+          <div class="data-panel">
+            <div class="panel-toolbar">
+              <h2>Extracted Data</h2>
+              <div class="toolbar-actions">
+                <button id="copyAllBtn" class="ghost-btn" disabled type="button">Copy Table</button>
+                <button id="downloadCsvBtn" class="ghost-btn" disabled type="button">Download CSV</button>
+              </div>
+            </div>
+            <div class="table-scroll">
+              <table class="booking-table">
+                <thead id="resultHead"></thead>
+                <tbody id="resultBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <section id="emailSection" class="email-section hidden">
+            <div class="section-title">Email-ready vertical tables</div>
+            <div id="emailGrid" class="email-grid"></div>
+          </section>
+        </section>
+
+        <section id="adminPanel" class="admin-panel hidden">
+          <div class="panel-toolbar">
+            <div>
+              <div class="panel-kicker">Crew Access</div>
+              <h2>User Administration</h2>
+            </div>
+            <button id="openCreateUserBtn" class="primary-btn" type="button">Create User</button>
+          </div>
+          <div class="table-scroll">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>Name / Email</th>
+                  <th>Role</th>
+                  <th>Upload Limit</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="userList"></tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <div id="passwordModal" class="modal-overlay hidden">
+      <div class="modal-box">
+        <div class="modal-title">
+          <span id="passwordModalTitle">Generated Password</span>
+          <button class="modal-close" data-close-modal="passwordModal" type="button">x</button>
+        </div>
+        <p class="warning">Save this password now. It will not be shown again.</p>
+        <div class="password-display">
+          <code id="generatedPassword"></code>
+          <button id="copyGeneratedPasswordBtn" class="ghost-btn" type="button">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="createUserModal" class="modal-overlay hidden">
+      <div class="modal-box">
+        <div class="modal-title">
+          <span>Create User</span>
+          <button class="modal-close" data-close-modal="createUserModal" type="button">x</button>
+        </div>
+        <form id="createUserForm" class="form-stack">
+          <label>
+            <span>Name</span>
+            <input id="newUserName" required />
+          </label>
+          <label>
+            <span>Email</span>
+            <input id="newUserEmail" type="email" required />
+          </label>
+          <label>
+            <span>Username</span>
+            <input id="newUsername" pattern="[A-Za-z0-9._-]{3,64}" />
+          </label>
+          <div class="form-row">
+            <label>
+              <span>Role</span>
+              <select id="newUserRole">
+                <option value="user">User</option>
+                <option value="manager">Manager</option>
+                <option value="admin">Admin</option>
+              </select>
+            </label>
+            <label>
+              <span>Upload Limit</span>
+              <input id="newUserUploadLimit" type="number" min="1" max="500" value="25" required />
+            </label>
+          </div>
+          <button class="primary-btn" type="submit">Generate Password</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="editUserModal" class="modal-overlay hidden">
+      <div class="modal-box">
+        <div class="modal-title">
+          <span>Edit User</span>
+          <button class="modal-close" data-close-modal="editUserModal" type="button">x</button>
+        </div>
+        <form id="editUserForm" class="form-stack">
+          <input id="editUserId" type="hidden" />
+          <label>
+            <span>Name</span>
+            <input id="editUserName" required />
+          </label>
+          <div class="form-row">
+            <label>
+              <span>Role</span>
+              <select id="editUserRole">
+                <option value="user">User</option>
+                <option value="manager">Manager</option>
+                <option value="admin">Admin</option>
+              </select>
+            </label>
+            <label>
+              <span>Upload Limit</span>
+              <input id="editUserUploadLimit" type="number" min="1" max="500" required />
+            </label>
+          </div>
+          <label class="checkbox-row">
+            <input id="editUserActive" type="checkbox" />
+            <span>Account active</span>
+          </label>
+          <button class="primary-btn" type="submit">Save Changes</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="changePasswordModal" class="modal-overlay hidden">
+      <div class="modal-box">
+        <div class="modal-title">
+          <span>Change Password</span>
+          <button class="modal-close" data-close-modal="changePasswordModal" type="button">x</button>
+        </div>
+        <form id="changePasswordForm" class="form-stack">
+          <label>
+            <span>Current password</span>
+            <input id="currentPassword" type="password" autocomplete="current-password" required />
+          </label>
+          <label>
+            <span>New password</span>
+            <input id="newPassword" type="password" autocomplete="new-password" minlength="12" required />
+          </label>
+          <button class="primary-btn" type="submit">Update Password</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="emailCopyModal" class="modal-overlay hidden">
       <div class="modal-box">
         <div class="modal-title">
           <span id="modalTitle">Copy for email</span>
-          <button id="modalClose" class="modal-close" type="button" aria-label="Close">x</button>
+          <button class="modal-close" data-close-modal="emailCopyModal" type="button">x</button>
         </div>
         <div id="modalPreview" class="plain-preview"></div>
-        <button id="modalCopyBtn" class="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold hover:bg-blue-500" type="button">Copy to clipboard</button>
-        <div class="modal-note">Paste directly into Outlook, Gmail, or any email client. Table formatting is preserved.</div>
+        <button id="modalCopyBtn" class="primary-btn" type="button">Copy to Clipboard</button>
       </div>
     </div>
+
     <script src="/static/app.js"></script>
   </body>
 </html>
