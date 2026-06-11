@@ -31,3 +31,249 @@ td:last-child,
 th:last-child {
   border-right: none;
 }
+
+.booking-table {
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.booking-table thead th {
+  background: rgb(15 23 42);
+  color: rgb(100 116 139);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  padding: 10px 12px;
+  position: sticky;
+  text-transform: uppercase;
+  top: 0;
+  z-index: 1;
+}
+
+.booking-table .th-sub {
+  color: rgb(71 85 105);
+  display: block;
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  margin-top: 1px;
+}
+
+.booking-table tbody td {
+  color: rgb(203 213 225);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  font-weight: 600;
+  min-height: 38px;
+  padding: 11px 12px;
+}
+
+.booking-table tbody tr:hover {
+  background: rgb(30 41 59 / 0.45);
+}
+
+.booking-table .cell-line {
+  color: rgb(167 139 250);
+}
+
+.booking-table .cell-cut {
+  color: rgb(245 158 11);
+}
+
+.booking-table .cell-na {
+  color: rgb(71 85 105);
+}
+
+.email-section {
+  margin-top: 1.5rem;
+}
+
+.section-title {
+  align-items: center;
+  color: rgb(100 116 139);
+  display: flex;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 10.5px;
+  gap: 0.5rem;
+  letter-spacing: 0.09em;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+}
+
+.section-title::after {
+  background: rgb(30 41 59);
+  content: "";
+  flex: 1;
+  height: 1px;
+}
+
+.email-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.email-card {
+  background: rgb(15 23 42);
+  border: 1px solid rgb(30 41 59);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.ec-head {
+  align-items: center;
+  background: rgb(2 6 23);
+  border-bottom: 1px solid rgb(30 41 59);
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 14px;
+}
+
+.ec-bkno,
+.ec-line,
+.ec-table td {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+
+.ec-bkno {
+  color: rgb(96 165 250);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ec-line {
+  color: rgb(167 139 250);
+  font-size: 11px;
+}
+
+.ec-table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.ec-table tr {
+  border-bottom: 1px solid rgb(30 41 59);
+}
+
+.ec-table tr:last-child {
+  border-bottom: none;
+}
+
+.ec-table td {
+  font-size: 12px;
+  padding: 6px 13px;
+  white-space: normal;
+}
+
+.ec-table td:first-child {
+  background: rgb(255 255 255 / 0.015);
+  color: rgb(148 163 184);
+  font-size: 11.5px;
+  width: 55%;
+}
+
+.ec-table td:last-child {
+  color: rgb(226 232 240);
+}
+
+.ec-cut {
+  color: rgb(245 158 11) !important;
+  font-weight: 700;
+}
+
+.ec-na {
+  color: rgb(71 85 105) !important;
+}
+
+.ec-foot {
+  border-top: 1px solid rgb(30 41 59);
+  display: flex;
+  gap: 7px;
+  padding: 10px 14px;
+}
+
+.email-action {
+  align-items: center;
+  border-radius: 6px;
+  display: inline-flex;
+  flex: 1;
+  font-size: 0.875rem;
+  justify-content: center;
+  padding: 0.5rem 0.75rem;
+}
+
+.modal-overlay {
+  align-items: center;
+  background: rgb(0 0 0 / 0.75);
+  display: none;
+  inset: 0;
+  justify-content: center;
+  padding: 2rem;
+  position: fixed;
+  z-index: 50;
+}
+
+.modal-overlay.show {
+  display: flex;
+}
+
+.modal-box {
+  background: rgb(15 23 42);
+  border: 1px solid rgb(51 65 85);
+  border-radius: 8px;
+  max-height: 90vh;
+  max-width: 460px;
+  overflow-y: auto;
+  padding: 1.5rem;
+  width: 100%;
+}
+
+.modal-title {
+  align-items: center;
+  color: rgb(226 232 240);
+  display: flex;
+  font-size: 14px;
+  font-weight: 700;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.modal-close {
+  color: rgb(148 163 184);
+  padding: 0.25rem 0.5rem;
+}
+
+.modal-close:hover {
+  color: white;
+}
+
+.plain-preview {
+  background: rgb(2 6 23);
+  border: 1px solid rgb(30 41 59);
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  overflow-x: auto;
+  padding: 14px;
+}
+
+.plain-preview table {
+  border-collapse: collapse;
+}
+
+.plain-preview td {
+  border: 1px solid #4a5170;
+  color: #dde3f5;
+  font-family: Arial, sans-serif;
+  font-size: 12.5px;
+  padding: 5px 10px;
+}
+
+.modal-note {
+  border-top: 1px solid rgb(30 41 59);
+  color: rgb(100 116 139);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11.5px;
+  margin-top: 1rem;
+  padding-top: 1rem;
+}

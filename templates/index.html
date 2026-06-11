@@ -85,15 +85,23 @@
             <div class="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
               <div class="flex items-center justify-between border-b border-slate-800 px-4 py-3">
                 <h2 class="font-semibold">Extracted data</h2>
-                <button id="downloadCsvBtn" class="rounded-md border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800">Download CSV</button>
+                <div class="flex flex-wrap gap-2">
+                  <button id="copyAllBtn" class="rounded-md border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800" disabled>Copy table</button>
+                  <button id="downloadCsvBtn" class="rounded-md border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800" disabled>Download CSV</button>
+                </div>
               </div>
               <div class="overflow-x-auto">
-                <table class="min-w-[1500px] text-left text-sm">
+                <table class="booking-table min-w-[1500px] text-left text-sm">
                   <thead id="resultHead" class="bg-slate-950 text-xs uppercase tracking-wide text-slate-400"></thead>
                   <tbody id="resultBody" class="divide-y divide-slate-800"></tbody>
                 </table>
               </div>
             </div>
+
+            <section id="emailSection" class="email-section hidden">
+              <div class="section-title">Email-ready vertical tables</div>
+              <div id="emailGrid" class="email-grid"></div>
+            </section>
           </section>
 
           <section id="adminPanel" class="hidden space-y-5">
@@ -114,6 +122,18 @@
 
         <div id="toast" class="fixed bottom-5 right-5 hidden rounded-md border border-slate-700 bg-slate-900 px-4 py-3 text-sm shadow-xl"></div>
       </main>
+    </div>
+
+    <div id="modalOverlay" class="modal-overlay">
+      <div class="modal-box">
+        <div class="modal-title">
+          <span id="modalTitle">Copy for email</span>
+          <button id="modalClose" class="modal-close" type="button" aria-label="Close">x</button>
+        </div>
+        <div id="modalPreview" class="plain-preview"></div>
+        <button id="modalCopyBtn" class="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold hover:bg-blue-500" type="button">Copy to clipboard</button>
+        <div class="modal-note">Paste directly into Outlook, Gmail, or any email client. Table formatting is preserved.</div>
+      </div>
     </div>
     <script src="/static/app.js"></script>
   </body>
