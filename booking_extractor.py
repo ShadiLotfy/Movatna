@@ -108,6 +108,7 @@ def first_match(text: str, patterns: Iterable[str], group: int = 1) -> str:
 def parse_date(value: str) -> datetime | None:
     value = re.sub(r"\s+\d{1,2}:\d{2}.*$", "", (value or "").strip())
     value = value.replace(",", "")
+    value = re.sub(r"\s+(?:Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday)$", "", value, flags=re.I)
     if not value or value.upper() == "N/A":
         return None
     formats = [
@@ -140,46 +141,43 @@ def fmt_date(value: str | datetime | None) -> str:
     return parsed.strftime("%d/%m/%Y") if parsed else (value or "").strip()
 
 
-def date_sort_key(value: str) -> datetime:
-    return parse_date(value) or datetime.max
+def normalized_cutoff_carrier(line: str) -> str:
+    return "Maersk" if re.search(r"\bmaersk\b", line or "", flags=re.I) else "Other"
 
 
-def earliest_date(values: Iterable[str]) -> str:
-    dates = [fmt_date(v) for v in values if fmt_date(v)]
-    if not dates:
-        return ""
-    return min(dates, key=date_sort_key)
-
-
-def sub_workdays(start: datetime, days: int) -> datetime:
-    # Matches the existing app/business workflow: Friday/Saturday are weekends.
-    current = start
-    taken = 0
-    while taken < days:
-        current -= timedelta(days=1)
-        if current.weekday() not in (4, 5):
-            taken += 1
-    return current
-
-
-def prev_workday(start: datetime) -> datetime:
-    current = start - timedelta(days=1)
-    while current.weekday() in (4, 5):
-        current -= timedelta(days=1)
-    return current
+def egypt_cutoff_workday(value: datetime) -> datetime:
+    if value.weekday() == 4:  # Friday
+        return value - timedelta(days=1)
+    if value.weekday() == 5:  # Saturday
+        return value - timedelta(days=2)
+    return value
 
 
 def calculated_cutoffs(ets_pol: str, line: str) -> dict[str, str]:
     ets = parse_date(ets_pol)
     if not ets:
         return {"si_vgm": "", "assigning": "", "gate_in": ""}
-    days = 5 if re.search(r"maersk", line or "", flags=re.I) else 3
-    si_vgm = sub_workdays(ets, days)
-    return {
+    carrier = normalized_cutoff_carrier(line)
+    days = 5 if carrier == "Maersk" else 3
+    si_vgm = egypt_cutoff_workday(ets - timedelta(days=days))
+    assigning = egypt_cutoff_workday(si_vgm - timedelta(days=1))
+    result = {
         "si_vgm": fmt_date(si_vgm),
-        "assigning": fmt_date(prev_workday(si_vgm)),
+        "assigning": fmt_date(assigning),
         "gate_in": fmt_date(si_vgm),
     }
+    logger.info(
+        "Calculated cutoffs: carrier=%s ets=%s ets_weekday=%s si_vgm=%s si_vgm_weekday=%s gate_in=%s assigning=%s assigning_weekday=%s",
+        line,
+        fmt_date(ets),
+        ets.strftime("%A"),
+        result["si_vgm"],
+        si_vgm.strftime("%A"),
+        result["gate_in"],
+        result["assigning"],
+        assigning.strftime("%A"),
+    )
+    return result
 
 
 def clean_booking_no(value: str, line: str = "") -> str:
@@ -313,38 +311,10 @@ def finalize(record: dict[str, str]) -> dict[str, str]:
     out["ETS POL / Sailing Date"] = fmt_date(out["ETS POL / Sailing Date"])
     out["ETA POD / Arrival Date"] = fmt_date(out["ETA POD / Arrival Date"]) or "N/A"
 
-    fallback = calculated_cutoffs(out["ETS POL / Sailing Date"], out["Line"])
-    ets_date = parse_date(out["ETS POL / Sailing Date"])
-    for key in (
-        "SI & VGM Cut Off (Calculated)",
-        "Assigning Cut Off (Calculated)",
-        "Gate In Cut Off (Calculated)",
-    ):
-        cutoff_date = parse_date(out[key])
-        if ets_date and cutoff_date and cutoff_date > ets_date:
-            logger.warning(
-                "Suspicious cutoff ignored: line=%s booking=%s field=%s cutoff=%s ets=%s",
-                out["Line"],
-                clean_booking_no(out["Booking No."], out["Line"]),
-                key,
-                fmt_date(cutoff_date),
-                fmt_date(ets_date),
-            )
-            out[key] = ""
-    if not out["SI & VGM Cut Off (Calculated)"]:
-        out["SI & VGM Cut Off (Calculated)"] = fallback["si_vgm"]
-    if not out["Assigning Cut Off (Calculated)"]:
-        si_date = parse_date(out["SI & VGM Cut Off (Calculated)"])
-        out["Assigning Cut Off (Calculated)"] = fmt_date(prev_workday(si_date)) if si_date else fallback["assigning"]
-    if not out["Gate In Cut Off (Calculated)"]:
-        out["Gate In Cut Off (Calculated)"] = out["SI & VGM Cut Off (Calculated)"] or fallback["gate_in"]
-
-    for key in (
-        "SI & VGM Cut Off (Calculated)",
-        "Assigning Cut Off (Calculated)",
-        "Gate In Cut Off (Calculated)",
-    ):
-        out[key] = fmt_date(out[key])
+    cutoffs = calculated_cutoffs(out["ETS POL / Sailing Date"], out["Line"])
+    out["SI & VGM Cut Off (Calculated)"] = cutoffs["si_vgm"]
+    out["Assigning Cut Off (Calculated)"] = cutoffs["assigning"]
+    out["Gate In Cut Off (Calculated)"] = cutoffs["gate_in"]
     return out
 
 
@@ -359,45 +329,9 @@ def legacy_generic_booking_no(s: str) -> str:
     )
 
 
-def extract_cutoffs(s: str, line: str = "") -> dict[str, str]:
-    si_dates = [
-        first_match(s, [rf"(?:INTENDED\s+)?SI CUT-OFF\s*:?\s*({DATE_RE})"]),
-        first_match(s, [rf"SI Cut-Off\s+VGM Cut-Off\s+Port Cut-Off\s+({DATE_RE})"]),
-        first_match(s, [rf"Shipping instruction closing.*?({DATE_RE})"]),
-        first_match(s, [rf"Document Close Date\s*:?\s*({DATE_RE})"]),
-        first_match(s, [rf"SHIPPING INSTRUCTIONS CUT-OFF.*?({DATE_RE})\s+\d{{1,2}}:\d{{2}}"]),
-    ]
-    vgm_dates = [
-        first_match(s, [rf"(?:INTENDED\s+)?VGM CUT-OFF\s*:?\s*({DATE_RE})"]),
-        first_match(s, [rf"SI Cut-Off\s+VGM Cut-Off\s+Port Cut-Off\s+{DATE_RE}\s+\d{{1,2}}:\d{{2}}\s+({DATE_RE})"]),
-        first_match(s, [rf"VGM cut-off.*?({DATE_RE})"]),
-        first_match(s, [rf"VERIFIED GROSS MASS.*?CUT-OFF\s*({DATE_RE})\s+\d{{1,2}}:\d{{2}}"]),
-    ]
-    gate_dates = [
-        first_match(s, [rf"(?:INTENDED\s+)?FCL CY CUT-OFF\s*:?\s*({DATE_RE})"]),
-        first_match(s, [rf"SI Cut-Off\s+VGM Cut-Off\s+Port Cut-Off\s+{DATE_RE}\s+\d{{1,2}}:\d{{2}}\s+{DATE_RE}\s+\d{{1,2}}:\d{{2}}\s+({DATE_RE})"]),
-        first_match(s, [rf"FCL delivery cut-off.*?({DATE_RE})"]),
-        first_match(s, [rf"Port Cut-Off Date/Time:\s*({DATE_RE})"]),
-        first_match(s, [rf"Gate Close Date.*?({DATE_RE})"]),
-        first_match(s, [rf"({DATE_RE})\s+00:00\s*Gate Close Date"]),
-        first_match(s, [rf"Return Equip.*?({DATE_RE})\s+\d{{1,2}}:\d{{2}}"]),
-        first_match(s, [rf"REEFERCUT-OFF.*?({DATE_RE})\s+\d{{1,2}}:\d{{2}}"]),
-    ]
-
-    si_vgm = earliest_date([*si_dates, *vgm_dates])
-    gate_in = earliest_date(gate_dates)
-    assigning = ""
-    if line == "Hapag-Lloyd":
-        assigning = first_match(s, [rf"Earliest container delivery date.*?({DATE_RE})"])
-    if line == "MSC" and not gate_in:
-        gate_in = first_match(s, [rf"SPECIAL CUT\s*-OFF.*?({DATE_RE})\s+\d{{1,2}}:\d{{2}}"])
-    return {"si_vgm": si_vgm, "assigning": assigning, "gate_in": gate_in}
-
-
 def parse_cosco(text: str) -> dict[str, str]:
     s = one_line(text)
     vv = vessel_voyage_from_combined(first_match(s, [r"INTENDED VESSEL/VOYAGE:\s*([A-Z0-9 .'-]+?\s+[A-Z0-9]{3,})\s+ETD"]))
-    cuts = extract_cutoffs(s, "COSCO")
     record = base_record("COSCO")
     record.update(
         {
@@ -410,9 +344,6 @@ def parse_cosco(text: str) -> dict[str, str]:
             "Final Dest.": first_match(s, [r"FINAL DESTINATION:\s*(.+?)\s+ESTIMATED CARGO"]),
             "ETS POL / Sailing Date": first_match(s, [rf"INTENDED VESSEL/VOYAGE:.*?ETD:\s*({DATE_RE})"]),
             "ETA POD / Arrival Date": first_match(s, [rf"ESTIMATED CARGO AVAILABILITY AT DESTINATION HUB:\s*({DATE_RE})"]),
-            "SI & VGM Cut Off (Calculated)": cuts["si_vgm"],
-            "Assigning Cut Off (Calculated)": cuts["assigning"],
-            "Gate In Cut Off (Calculated)": cuts["gate_in"],
         }
     )
     return finalize(record)
@@ -439,7 +370,6 @@ def parse_cma_cgm(text: str) -> dict[str, str]:
         ets = first_match(s, [rf"(?:CMA\s+CGM|APL|ANL|CNC)[A-Z0-9 ]+\s+({DATE_RE})\s+POL", rf"Port Of Loading:.*?({DATE_RE})\s+\d{{1,2}}:\d{{2}}\s*ETD:"])
         eta = first_match(s, [rf"({DATE_RE})\s+\d{{1,2}}:\d{{2}}\s*SALVADOR\s+ETA:", rf"Transhipment:.*?({DATE_RE})\s+\d{{1,2}}:\d{{2}}\s*SALVADOR"])
 
-    cuts = extract_cutoffs(s, "CMA CGM")
     record.update(
         {
             "Booking No.": first_match(s, [r"Booking (?:Number|reference|Ref\.?):\s*([A-Z0-9-]+)", r"\b(CFA\d{7})\b"]),
@@ -451,9 +381,6 @@ def parse_cma_cgm(text: str) -> dict[str, str]:
             "Final Dest.": final_dest,
             "ETS POL / Sailing Date": ets,
             "ETA POD / Arrival Date": eta,
-            "SI & VGM Cut Off (Calculated)": cuts["si_vgm"],
-            "Assigning Cut Off (Calculated)": cuts["assigning"],
-            "Gate In Cut Off (Calculated)": cuts["gate_in"],
         }
     )
     return finalize(record)
@@ -461,7 +388,6 @@ def parse_cma_cgm(text: str) -> dict[str, str]:
 
 def parse_hapag(text: str) -> dict[str, str]:
     s = one_line(text)
-    cuts = extract_cutoffs(s, "Hapag-Lloyd")
     record = base_record("Hapag-Lloyd")
     record.update(
         {
@@ -474,9 +400,6 @@ def parse_hapag(text: str) -> dict[str, str]:
             "Final Dest.": "Leixoes",
             "ETS POL / Sailing Date": first_match(s, [rf"Voy\. No:\s*[A-Z0-9]+.*?({DATE_RE})\s+18:00"]),
             "ETA POD / Arrival Date": first_match(s, [rf"Voy\. No:\s*2623N.*?({DATE_RE})\s+07:00", rf"LEIXOES.*?({DATE_RE})\s+07:00"]),
-            "SI & VGM Cut Off (Calculated)": cuts["si_vgm"],
-            "Assigning Cut Off (Calculated)": cuts["assigning"],
-            "Gate In Cut Off (Calculated)": cuts["gate_in"],
         }
     )
     return finalize(record)
@@ -484,7 +407,6 @@ def parse_hapag(text: str) -> dict[str, str]:
 
 def parse_maersk(text: str) -> dict[str, str]:
     s = one_line(text)
-    cuts = extract_cutoffs(s, "Maersk")
     record = base_record("Maersk")
     pol = first_match(s, [r"From:\s*(.+?)\s+Contact Name:"]) or "Port Said East"
     pod = first_match(s, [r"To:\s*(.+?)\s+Customer Cargo"]) or "Santos"
@@ -500,9 +422,6 @@ def parse_maersk(text: str) -> dict[str, str]:
             "Final Dest.": pod,
             "ETS POL / Sailing Date": plan["etd"],
             "ETA POD / Arrival Date": plan["final_eta"],
-            "SI & VGM Cut Off (Calculated)": cuts["si_vgm"],
-            "Assigning Cut Off (Calculated)": cuts["assigning"],
-            "Gate In Cut Off (Calculated)": cuts["gate_in"],
         }
     )
     return finalize(record)
@@ -572,13 +491,6 @@ def parse_msc(text: str) -> dict[str, str]:
         or first_match(s, [r"\b(40HC|40GP|20GP|20HC)\b.*?cbm/h\s+0\s*([0-9]+)\s+N"], 2)
         or first_match(s, [r"DRYGIOIA TAURO\s+\d+\s+\d+\s+\d+\s+([0-9]+)TERNI"])
     )
-    cuts = extract_cutoffs(s, "MSC")
-    msc_gate_cutoff = first_match(
-        s,
-        [rf"REEFERCUT-OFF\(Date/ Time \)\s+{DATE_RE}\s+\d{{1,2}}:\d{{2}}\s+({DATE_RE})"],
-    )
-    if msc_gate_cutoff:
-        cuts["gate_in"] = msc_gate_cutoff
     eta_pod = first_match(
         s,
         [
@@ -599,9 +511,6 @@ def parse_msc(text: str) -> dict[str, str]:
             "Final Dest.": first_match(s, [r"GIOIA TAURO.*?([A-Z ]+,\s*ITALY)\s+REEFER"]) or "Terni, Italy",
             "ETS POL / Sailing Date": first_match(s, [r"AG604R\s*(\d{2}/\d{2}/\d{4})\s+05:00", r"EST\. TIME OF ARRIVAL/DEPARTURE.*?(\d{2}/\d{2}/\d{4})\s+05:00"]),
             "ETA POD / Arrival Date": eta_pod or "N/A",
-            "SI & VGM Cut Off (Calculated)": cuts["si_vgm"],
-            "Assigning Cut Off (Calculated)": cuts["assigning"],
-            "Gate In Cut Off (Calculated)": cuts["gate_in"],
         }
     )
     return finalize(record)
@@ -610,7 +519,6 @@ def parse_msc(text: str) -> dict[str, str]:
 def parse_one(text: str) -> dict[str, str]:
     s = one_line(text)
     vv = vessel_voyage_from_combined(first_match(s, [r"Trunk Vessel\s*:\s*(.+?)\s+Latest ETA/ETD"]))
-    cuts = extract_cutoffs(s, "ONE")
     record = base_record("ONE")
     record.update(
         {
@@ -623,9 +531,6 @@ def parse_one(text: str) -> dict[str, str]:
             "Final Dest.": first_match(s, [r"Place of Delivery\s*:\s*(.+?)\s*Terminal"]),
             "ETS POL / Sailing Date": first_match(s, [rf"Trunk Vessel.*?Latest ETA/ETD\s*:\s*{DATE_RE}\s*/\s*({DATE_RE})"]),
             "ETA POD / Arrival Date": first_match(s, [rf"POD\s*/\s*DEL ETA\s*:\s*({DATE_RE})"]),
-            "SI & VGM Cut Off (Calculated)": cuts["si_vgm"],
-            "Assigning Cut Off (Calculated)": cuts["assigning"],
-            "Gate In Cut Off (Calculated)": cuts["gate_in"],
         }
     )
     return finalize(record)
@@ -635,7 +540,6 @@ def parse_yang_ming(text: str) -> dict[str, str]:
     s = one_line(text)
     vv = first_match(s, [r":\s*([A-Z ]+/\s*[0-9A-Z]+)\s+\d{2}/\d{2}/\d{4}\s*DAMIETTA", r"([A-Z ]+/\s*[0-9A-Z]+)\s+\d{2}/\d{2}/\d{4}\s+DAMIETTA"])
     parts = [part.strip() for part in vv.split("/", 1)] if vv else ["", ""]
-    cuts = extract_cutoffs(s, "Yang Ming")
     record = base_record("Yang Ming")
     record.update(
         {
@@ -648,9 +552,6 @@ def parse_yang_ming(text: str) -> dict[str, str]:
             "Final Dest.": "Piraeus",
             "ETS POL / Sailing Date": first_match(s, [rf"({DATE_RE})\s+00:00\s*Gate Close Date", rf"Gate Close Date.*?({DATE_RE})"]),
             "ETA POD / Arrival Date": first_match(s, [rf"({DATE_RE})\s+ETA\s*:", r"YM WORLD / 048W\s+(\d{2}/\d{2}/\d{4})"]),
-            "SI & VGM Cut Off (Calculated)": cuts["si_vgm"],
-            "Assigning Cut Off (Calculated)": cuts["assigning"],
-            "Gate In Cut Off (Calculated)": cuts["gate_in"],
         }
     )
     return finalize(record)
@@ -658,7 +559,6 @@ def parse_yang_ming(text: str) -> dict[str, str]:
 
 def parse_shipping_order(text: str) -> dict[str, str]:
     s = one_line(text)
-    cuts = extract_cutoffs(s, "Shipping Order")
     record = base_record("Shipping Order")
     record.update(
         {
@@ -671,9 +571,6 @@ def parse_shipping_order(text: str) -> dict[str, str]:
             "Final Dest.": "N/A",
             "ETS POL / Sailing Date": first_match(s, [r"Estimated sailing date at.*?(\d{2}/\d{2}/\d{4})", r"9491850/ IMO:\s*(\d{2}/\d{2}/\d{4})"]),
             "ETA POD / Arrival Date": first_match(s, [r"Estimated arrival date at\s*:?\s*(\d{2}/\d{2}/\d{4})"]) or "N/A",
-            "SI & VGM Cut Off (Calculated)": cuts["si_vgm"],
-            "Assigning Cut Off (Calculated)": cuts["assigning"],
-            "Gate In Cut Off (Calculated)": cuts["gate_in"],
         }
     )
     return finalize(record)
