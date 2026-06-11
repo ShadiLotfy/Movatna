@@ -20,6 +20,8 @@ let users = [];
 let loaderProgress = 0;
 let loaderTimer = null;
 let loaderHideTimer = null;
+const revealTimers = new WeakMap();
+const revealChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
 const homeSections = {
   future: {
@@ -177,7 +179,7 @@ function enhanceRollingText() {
     ".tool-status",
     ".tab-button",
     ".primary-btn",
-    ".ghost-btn:not(.modal-close)",
+    ".ghost-btn:not(.modal-close):not(.admin-action)",
     ".email-action",
   ].join(",");
 
@@ -187,9 +189,49 @@ function enhanceRollingText() {
     const text = element.textContent.trim();
     if (!text || text.length > 44) return;
     element.dataset.rollEnhanced = "true";
+    element.dataset.revealText = text;
     element.setAttribute("aria-label", text);
     element.innerHTML = `<span class="roll-text" aria-hidden="true"><span class="roll-text__inner"><span>${escapeHtml(text)}</span><span>${escapeHtml(text)}</span></span></span>`;
+    element.addEventListener("mouseenter", () => runLetterReveal(element));
+    element.addEventListener("focus", () => runLetterReveal(element));
+    element.addEventListener("touchstart", () => runLetterReveal(element), { passive: true });
   });
+}
+
+function randomizeText(finalText, progress) {
+  return Array.from(finalText)
+    .map((char, index) => {
+      if (char === " ") return " ";
+      if (index < progress) return char;
+      return revealChars[Math.floor(Math.random() * revealChars.length)];
+    })
+    .join("");
+}
+
+function runLetterReveal(element) {
+  const finalText = element.dataset.revealText || element.getAttribute("aria-label") || "";
+  if (!finalText) return;
+  window.clearInterval(revealTimers.get(element));
+  const targets = element.querySelectorAll(".roll-text__inner span");
+  if (!targets.length) return;
+
+  let tick = 0;
+  const maxTicks = Math.max(8, finalText.length + 4);
+  const timer = window.setInterval(() => {
+    tick += 1;
+    const progress = Math.max(0, tick - 3);
+    const value = tick >= maxTicks ? finalText : randomizeText(finalText, progress);
+    targets.forEach((target) => {
+      target.textContent = value;
+    });
+    if (tick >= maxTicks) {
+      window.clearInterval(timer);
+      targets.forEach((target) => {
+        target.textContent = finalText;
+      });
+    }
+  }, 28);
+  revealTimers.set(element, timer);
 }
 
 function setHomeSection(sectionKey) {
@@ -671,9 +713,9 @@ function renderUsers() {
           <td>${created}</td>
           <td>
             <div class="action-row">
-              <button class="ghost-btn" data-edit-user="${user.id}" type="button">Edit</button>
-              <button class="ghost-btn" data-reset-user="${user.id}" type="button">Reset</button>
-              <button class="ghost-btn danger" data-delete-user="${user.id}" type="button">Delete</button>
+              <button class="admin-action action-edit" data-edit-user="${user.id}" type="button">Edit</button>
+              <button class="admin-action action-reset" data-reset-user="${user.id}" type="button">Reset Password</button>
+              <button class="admin-action action-delete" data-delete-user="${user.id}" type="button">Delete / Disable</button>
             </div>
           </td>
         </tr>`;

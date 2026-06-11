@@ -192,6 +192,7 @@ label span,
 .primary-btn,
 .ghost-btn,
 .email-action,
+.admin-action,
 .status-pill {
   text-transform: uppercase;
 }
@@ -227,7 +228,6 @@ label span,
 .public-nav,
 .tabs,
 .toolbar-actions,
-.action-row,
 .ec-foot,
 .form-row,
 .hero-actions,
@@ -669,6 +669,10 @@ select:focus {
   transition: transform 0.64s cubic-bezier(0.19, 1, 0.22, 1);
 }
 
+.roll-text__inner span {
+  min-width: max-content;
+}
+
 :is(.brand, .panel-kicker, .section-title, button):hover .roll-text__inner,
 :is(.brand, .panel-kicker, .section-title, button):focus-visible .roll-text__inner {
   transform: translateY(calc(-1.18em));
@@ -850,6 +854,10 @@ table {
   width: 100%;
 }
 
+.admin-table {
+  min-width: 1320px;
+}
+
 th {
   background: rgba(245, 241, 233, 0.045);
   border-bottom: 1px solid var(--line);
@@ -861,12 +869,26 @@ th {
   white-space: nowrap;
 }
 
+.admin-table th:last-child {
+  min-width: 390px;
+  width: 390px;
+}
+
 td {
   border-top: 1px solid var(--line);
   color: var(--ink);
   font-size: 14px;
   padding: 15px 16px;
   white-space: nowrap;
+}
+
+.admin-table td {
+  vertical-align: middle;
+}
+
+.admin-table td:last-child {
+  min-width: 390px;
+  white-space: normal;
 }
 
 tbody tr {
@@ -981,11 +1003,83 @@ tbody tr:hover {
   margin-top: 5px;
 }
 
+.action-row {
+  align-items: stretch;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  justify-content: flex-start;
+  min-width: 360px;
+}
+
+.admin-action {
+  align-items: center;
+  background: rgba(222, 241, 250, 0.035);
+  border: 1px solid var(--line-strong);
+  clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+  color: var(--ink);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  justify-content: center;
+  letter-spacing: 0.1em;
+  line-height: 1.15;
+  min-height: 40px;
+  min-width: 92px;
+  padding: 10px 14px;
+  text-align: center;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s, color 0.2s, transform 0.2s;
+  white-space: nowrap;
+}
+
+.admin-action:hover,
+.admin-action:focus-visible {
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.action-edit {
+  border-color: rgba(216, 243, 255, 0.5);
+  color: var(--paper);
+}
+
+.action-edit:hover,
+.action-edit:focus-visible {
+  background: rgba(216, 243, 255, 0.12);
+  box-shadow: 0 0 0 3px rgba(216, 243, 255, 0.07);
+}
+
+.action-reset {
+  border-color: rgba(154, 201, 216, 0.74);
+  color: var(--gold-soft);
+}
+
+.action-reset:hover,
+.action-reset:focus-visible {
+  background: rgba(154, 201, 216, 0.14);
+  box-shadow: 0 0 0 3px rgba(154, 201, 216, 0.08);
+}
+
+.action-delete {
+  border-color: rgba(255, 106, 95, 0.68);
+  color: #ffc2bd;
+  min-width: 142px;
+}
+
+.action-delete:hover,
+.action-delete:focus-visible {
+  background: rgba(255, 106, 95, 0.12);
+  box-shadow: 0 0 0 3px rgba(255, 106, 95, 0.08);
+  color: #ffe0dd;
+}
+
 .status-pill {
   border: 1px solid var(--line);
   display: inline-block;
+  font-weight: 900;
   letter-spacing: 0.08em;
   padding: 6px 10px;
+  white-space: nowrap;
 }
 
 .status-pill.active {
@@ -1488,6 +1582,24 @@ tbody tr:hover {
   .loader-stage {
     width: min(620px, 90vw);
   }
+
+  .admin-table th:last-child,
+  .admin-table td:last-child {
+    min-width: 260px;
+    width: 260px;
+  }
+
+  .action-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+
+  .admin-action {
+    justify-content: center;
+    min-width: 0;
+    width: 100%;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1517,6 +1629,10 @@ tbody tr:hover {
 
   .email-grid {
     grid-template-columns: 1fr;
+  }
+
+  .admin-table {
+    min-width: 1040px;
   }
 
   .loader-meta {
