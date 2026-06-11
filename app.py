@@ -4,9 +4,11 @@ import hashlib
 import hmac
 import os
 import re
+import signal
 import secrets
 import smtplib
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from pathlib import Path
@@ -117,6 +119,25 @@ def database_uri() -> str:
     elif raw.startswith("postgresql://") and "+psycopg" not in raw:
         raw = raw.replace("postgresql://", "postgresql+psycopg://", 1)
     return raw
+
+
+@contextmanager
+def hard_timeout(seconds: int, message: str):
+    if not hasattr(signal, "SIGALRM"):
+        yield
+        return
+
+    def timeout_handler(_signum, _frame):
+        raise TimeoutError(message)
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+    try:
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.setitimer(signal.ITIMER_REAL, seconds)
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
 
 
 def sqlalchemy_engine_options(uri: str) -> dict[str, int | bool]:
@@ -249,12 +270,13 @@ def send_otp_email(email: str, otp: str) -> None:
             """,
             subtype="html",
         )
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=smtp_timeout) as smtp:
-            smtp.ehlo()
-            smtp.starttls()
-            smtp.ehlo()
-            smtp.login(smtp_username, smtp_password)
-            smtp.send_message(message)
+        with hard_timeout(smtp_timeout, f"SMTP connection timed out after {smtp_timeout} seconds"):
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=smtp_timeout) as smtp:
+                smtp.ehlo()
+                smtp.starttls()
+                smtp.ehlo()
+                smtp.login(smtp_username, smtp_password)
+                smtp.send_message(message)
         return
 
     if not api_key:
