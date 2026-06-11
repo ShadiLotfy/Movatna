@@ -54,8 +54,9 @@ ADMIN_PASSWORD=long-random-admin-bootstrap-secret
 DATABASE_URL=sqlite:///instance/movanta.sqlite3
 EMAIL_SERVICE_API_KEY=
 EMAIL_FROM=movantaa@outlook.com
-SMTP_HOST=smtp.office365.com
+SMTP_HOST=smtp-mail.outlook.com
 SMTP_PORT=587
+SMTP_TIMEOUT_SECONDS=8
 SMTP_USERNAME=movantaa@outlook.com
 SMTP_PASSWORD=outlook-app-password-or-smtp-password
 JWT_SECRET=64-character-random-secret
@@ -121,8 +122,9 @@ Use `movantaa@outlook.com` as the sender:
 
 ```env
 EMAIL_FROM=movantaa@outlook.com
-SMTP_HOST=smtp.office365.com
+SMTP_HOST=smtp-mail.outlook.com
 SMTP_PORT=587
+SMTP_TIMEOUT_SECONDS=8
 SMTP_USERNAME=movantaa@outlook.com
 SMTP_PASSWORD=your-outlook-app-password
 ```

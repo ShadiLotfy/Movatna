@@ -212,6 +212,7 @@ def send_otp_email(email: str, otp: str) -> None:
     email_from = os.environ.get("EMAIL_FROM", "movantaa@outlook.com").strip()
     smtp_host = os.environ.get("SMTP_HOST", "").strip()
     smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+    smtp_timeout = int(os.environ.get("SMTP_TIMEOUT_SECONDS", "8"))
     smtp_username = os.environ.get("SMTP_USERNAME", "").strip()
     smtp_password = os.environ.get("SMTP_PASSWORD", "").strip()
 
@@ -235,8 +236,10 @@ def send_otp_email(email: str, otp: str) -> None:
             """,
             subtype="html",
         )
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=20) as smtp:
+        with smtplib.SMTP(smtp_host, smtp_port, timeout=smtp_timeout) as smtp:
+            smtp.ehlo()
             smtp.starttls()
+            smtp.ehlo()
             smtp.login(smtp_username, smtp_password)
             smtp.send_message(message)
         return
