@@ -15,6 +15,17 @@ class BookingExtractorTests(unittest.TestCase):
             with self.subTest(filename=filename):
                 self.assertEqual(parse_booking_pdf(ROOT / filename), expected)
 
+    def test_maersk_uses_first_transport_plan_vessel_and_voyage(self):
+        row = parse_booking_pdf(ROOT / "MAERSK.pdf")
+
+        self.assertEqual(row["Port of Loading"], "Port Said East")
+        self.assertEqual(row["Vessel Name"], "LISA")
+        self.assertEqual(row["Voyage No."], "605S")
+        self.assertEqual(row["ETS POL / Sailing Date"], "31/01/2026")
+        self.assertEqual(row["ETA POD / Arrival Date"], "27/02/2026")
+        self.assertNotEqual(row["Vessel Name"], "MAERSK LEON")
+        self.assertNotEqual(row["Voyage No."], "607S")
+
     def test_export_keeps_schema_order_for_frontend_and_csv(self):
         paths = [ROOT / filename for filename in EXPECTED]
         rows = export_booking_data(paths)

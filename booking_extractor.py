@@ -486,25 +486,68 @@ def parse_maersk(text: str) -> dict[str, str]:
     s = one_line(text)
     cuts = extract_cutoffs(s, "Maersk")
     record = base_record("Maersk")
-    first_leg = re.search(r"MVS\s+([A-Z ]+?)\s+([A-Z0-9]{3,})\s+(\d{4}-\d{2}-\d{2})\s+(\d{4}-\d{2}-\d{2})", s, flags=re.I | re.S)
-    last_leg = re.findall(r"MVS\s+([A-Z ]+?)\s+([A-Z0-9]{3,})\s+(\d{4}-\d{2}-\d{2})\s+(\d{4}-\d{2}-\d{2})", s, flags=re.I | re.S)
+    pol = first_match(s, [r"From:\s*(.+?)\s+Contact Name:"]) or "Port Said East"
+    pod = first_match(s, [r"To:\s*(.+?)\s+Customer Cargo"]) or "Santos"
+    plan = extract_maersk_transport_plan(s, pol)
     record.update(
         {
             "Booking No.": first_match(s, [r"B\s*ooking No\s*\.?:\s*(\d+)"]),
             "Equipment": first_match(s, [r"Cargo Volume\s+(\d+\s+\d+\s+DRY\s+\d+\s+\d+)", r"Quantity Size/Type/Height.*?Cargo Volume\s+(\d+\s+\d+\s+DRY\s+\d+\s+\d+)"]),
-            "Vessel Name": first_leg.group(1) if first_leg else "",
-            "Voyage No.": first_leg.group(2) if first_leg else "",
-            "Port of Loading": first_match(s, [r"From:\s*(.+?)\s+Contact Name:"]) or "Port Said East",
-            "Port of Discharge": first_match(s, [r"To:\s*(.+?)\s+Customer Cargo"]) or "Santos",
-            "Final Dest.": first_match(s, [r"To:\s*(.+?)\s+Customer Cargo"]) or "Santos",
-            "ETS POL / Sailing Date": first_leg.group(3) if first_leg else "",
-            "ETA POD / Arrival Date": last_leg[-1][3] if last_leg else "",
+            "Vessel Name": plan["vessel"],
+            "Voyage No.": plan["voyage"],
+            "Port of Loading": pol,
+            "Port of Discharge": pod,
+            "Final Dest.": pod,
+            "ETS POL / Sailing Date": plan["etd"],
+            "ETA POD / Arrival Date": plan["final_eta"],
             "SI & VGM Cut Off (Calculated)": cuts["si_vgm"],
             "Assigning Cut Off (Calculated)": cuts["assigning"],
             "Gate In Cut Off (Calculated)": cuts["gate_in"],
         }
     )
     return finalize(record)
+
+
+def extract_maersk_transport_plan(s: str, pol: str) -> dict[str, str]:
+    """
+    Maersk BCs list legs under Intended Transport Plan as:
+    From / To / Mode / Vessel / Voy No. / ETD / ETA.
+
+    The first MVS row is the booked POL sailing vessel. Keep vessel, voyage,
+    and ETD paired from that same first row; only the final ETA comes from the
+    last leg.
+    """
+    section = first_match(
+        s,
+        [r"Intended Transport Plan\s+From\s+To\s+Mode\s+Vessel\s+Voy No\.\s+ETD\s+ETA\s+(.+?)\s+If you would"],
+    )
+    haystack = section or s
+    leg_pattern = re.compile(
+        r"(?:(?P<origin>[A-Z][A-Z ]+(?:T\s*erminal|Terminal))\s+(?P<destination>.+?(?:T\s*erminal|Terminal))\s+)?"
+        r"MVS\s+(?P<vessel>[A-Z][A-Z ]+?)\s+(?P<voyage>[A-Z0-9]{3,})\s+"
+        r"(?P<etd>\d{4}-\d{2}-\d{2})\s+(?P<eta>\d{4}-\d{2}-\d{2})",
+        flags=re.I | re.S,
+    )
+    legs = [match.groupdict() for match in leg_pattern.finditer(haystack)]
+    if not legs:
+        return {"vessel": "", "voyage": "", "etd": "", "final_eta": ""}
+
+    first = legs[0]
+    origin = first.get("origin") or ""
+    if origin and clean_port(origin) != clean_port(pol):
+        logger.warning(
+            "Maersk first transport leg origin does not match POL: pol=%s first_origin=%s vessel=%s voyage=%s",
+            clean_port(pol),
+            clean_port(origin),
+            clean_vessel(first["vessel"]),
+            clean_voyage(first["voyage"]),
+        )
+    return {
+        "vessel": first["vessel"],
+        "voyage": first["voyage"],
+        "etd": first["etd"],
+        "final_eta": legs[-1]["eta"],
+    }
 
 
 def extract_msc_booking_no(s: str) -> str:
