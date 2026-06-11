@@ -19,6 +19,7 @@ let rows = [];
 let users = [];
 let loaderProgress = 0;
 let loaderTimer = null;
+let loaderHideTimer = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -51,6 +52,7 @@ function showLoader(show, label = "Loading content") {
   const loader = $("loader");
   if (!loader) return;
   if (show) {
+    window.clearTimeout(loaderHideTimer);
     window.clearInterval(loaderTimer);
     loader.classList.remove("hidden");
     setLoaderProgress(0, label);
@@ -59,7 +61,7 @@ function showLoader(show, label = "Loading content") {
   }
   window.clearInterval(loaderTimer);
   setLoaderProgress(100, "Ready to explore");
-  window.setTimeout(() => loader.classList.add("hidden"), 360);
+  loaderHideTimer = window.setTimeout(() => loader.classList.add("hidden"), 520);
 }
 
 function toast(message, isError = false) {
@@ -129,6 +131,29 @@ function closeModal(id) {
   $(id).classList.add("hidden");
 }
 
+function enhanceRollingText() {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const selector = [
+    ".brand",
+    ".panel-kicker",
+    ".section-title",
+    ".tab-button",
+    ".primary-btn",
+    ".ghost-btn:not(.modal-close)",
+    ".email-action",
+  ].join(",");
+
+  document.querySelectorAll(selector).forEach((element) => {
+    if (element.dataset.rollEnhanced === "true") return;
+    if (element.children.length && !Array.from(element.children).every((child) => child.nodeType === Node.TEXT_NODE)) return;
+    const text = element.textContent.trim();
+    if (!text || text.length > 44) return;
+    element.dataset.rollEnhanced = "true";
+    element.setAttribute("aria-label", text);
+    element.innerHTML = `<span class="roll-text" aria-hidden="true"><span class="roll-text__inner"><span>${escapeHtml(text)}</span><span>${escapeHtml(text)}</span></span></span>`;
+  });
+}
+
 function setUser(user) {
   currentUser = user;
   $("userBar").classList.remove("hidden");
@@ -147,6 +172,7 @@ function renderTable() {
   $("copyAllBtn").disabled = rows.length === 0;
   $("downloadCsvBtn").disabled = rows.length === 0;
   renderEmailCards();
+  enhanceRollingText();
 }
 
 function headerLabel(label) {
@@ -485,6 +511,7 @@ function renderUsers() {
         </tr>`;
     })
     .join("");
+  enhanceRollingText();
 }
 
 $("openCreateUserBtn").addEventListener("click", () => openModal("createUserModal"));
@@ -601,4 +628,5 @@ document.querySelectorAll(".modal-overlay").forEach((modal) => {
   });
 });
 
+enhanceRollingText();
 bootstrap();
