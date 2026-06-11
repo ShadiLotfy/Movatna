@@ -184,7 +184,7 @@ def calculated_cutoffs(ets_pol: str, line: str) -> dict[str, str]:
 
 def clean_booking_no(value: str, line: str = "") -> str:
     cleaned = re.sub(r"[^\w-]", "", value or "").strip()
-    return cleaned.upper() if re.search(r"cosco", line or "", flags=re.I) else cleaned
+    return re.sub(r"\D", "", cleaned) if re.search(r"cosco", line or "", flags=re.I) else cleaned
 
 
 def clean_voyage(value: str) -> str:
