@@ -133,8 +133,14 @@ Use an Outlook app password if multi-factor authentication is enabled. Do not co
 
 1. Create a free account at [resend.com](https://resend.com).
 2. Create an API key.
-3. Set `EMAIL_SERVICE_API_KEY` to that key.
-4. Set `EMAIL_FROM` to a verified sender.
+3. Set `EMAIL_SERVICE_API_KEY` to that key. Replace `re_xxxxxxxxx` with your real Resend API key.
+4. Set `EMAIL_FROM` to a verified sender. For a first test, use `onboarding@resend.dev`.
+
+To test Resend locally:
+
+```bash
+python scripts/test_resend.py
+```
 
 If neither SMTP nor Resend is configured in local development, OTPs are printed to the terminal/log file.
 

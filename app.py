@@ -265,7 +265,10 @@ def send_otp_email(email: str, otp: str) -> None:
         },
         timeout=15,
     )
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.HTTPError as exc:
+        raise RuntimeError(f"Resend email send failed: {response.status_code} {response.text}") from exc
 
 
 def otp_rate_limited(email: str) -> bool:
@@ -378,7 +381,13 @@ def register_routes(app: Flask) -> None:
             )
         )
         db.session.commit()
-        send_otp_email(email, otp)
+        try:
+            send_otp_email(email, otp)
+        except Exception:
+            app.logger.exception("Failed to send OTP email to %s", email)
+            OtpChallenge.query.filter(func.lower(OtpChallenge.email) == email).delete()
+            db.session.commit()
+            return jsonify({"error": "Could not send OTP. Check email configuration and try again."}), 503
         return jsonify({"ok": True, "message": "OTP sent"})
 
     @app.post("/api/auth/verify-otp")
