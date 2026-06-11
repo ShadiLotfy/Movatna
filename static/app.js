@@ -119,8 +119,11 @@ function uploadExtraction(formData) {
 }
 
 function show(view) {
-  ["loginView", "dashboardView"].forEach((id) => $(id).classList.add("hidden"));
+  ["homeView", "loginView", "dashboardView"].forEach((id) => $(id).classList.add("hidden"));
   $(view).classList.remove("hidden");
+  const isLoggedIn = Boolean(currentUser);
+  $("publicNav").classList.toggle("hidden", isLoggedIn);
+  $("userBar").classList.toggle("hidden", !isLoggedIn);
 }
 
 function openModal(id) {
@@ -137,6 +140,7 @@ function enhanceRollingText() {
     ".brand",
     ".panel-kicker",
     ".section-title",
+    ".tool-status",
     ".tab-button",
     ".primary-btn",
     ".ghost-btn:not(.modal-close)",
@@ -156,12 +160,96 @@ function enhanceRollingText() {
 
 function setUser(user) {
   currentUser = user;
-  $("userBar").classList.remove("hidden");
   $("userIdentity").textContent = `${user.name || user.username} / ${user.role.toUpperCase()}`;
   $("adminTab").classList.toggle("hidden", !user.isAdmin);
   $("uploadLimitNote").textContent = user.isAdmin
     ? "Admin access: batch upload limit is unrestricted."
     : `Upload limit: ${user.uploadLimit} PDFs per extraction.`;
+  updateUploadLimitCard();
+}
+
+function signOutUser() {
+  currentUser = null;
+  rows = [];
+  $("pdfInput").value = "";
+  renderTable();
+  updateUploadLimitCard();
+}
+
+function openBookingTool() {
+  if (currentUser) {
+    show("dashboardView");
+    setTab("dashboard");
+    return;
+  }
+  show("loginView");
+  $("loginIdentifier").focus();
+  toast("Login or request access to use the Booking Extraction Tool.");
+}
+
+function showComingSoon(toolName) {
+  toast(`${toolName} is coming soon. Contact Movanta for early access.`);
+}
+
+function updateUploadLimitCard() {
+  const card = $("uploadLimitCard");
+  if (!card) return;
+  const title = $("uploadLimitTitle");
+  const meter = $("uploadLimitMeter");
+  const message = $("uploadLimitMessage");
+  const submit = $("extractSubmitBtn");
+  const input = $("pdfInput");
+  const selected = Array.from(input?.files || []).length;
+
+  card.classList.remove("warning", "blocked", "ready");
+  if (!currentUser) {
+    title.textContent = "Login required";
+    message.textContent = "Login to see your upload capacity.";
+    meter.style.transform = "scaleX(0)";
+    if (submit) submit.disabled = true;
+    return;
+  }
+
+  if (currentUser.isAdmin) {
+    title.textContent = selected ? `${selected} selected` : "Admin access";
+    message.textContent = "Admin uploads are unrestricted for batch processing.";
+    meter.style.transform = selected ? "scaleX(1)" : "scaleX(0.18)";
+    if (submit) submit.disabled = false;
+    card.classList.add("ready");
+    return;
+  }
+
+  const limit = Number(currentUser.uploadLimit || 0);
+  const remaining = Math.max(0, limit - selected);
+  const usedRatio = limit > 0 ? Math.min(1, selected / limit) : 1;
+  title.textContent = `${remaining} of ${limit} slots remaining`;
+  meter.style.transform = `scaleX(${usedRatio})`;
+
+  if (limit < 1) {
+    card.classList.add("blocked");
+    message.textContent = "Your upload limit has been reached. Contact Movanta to continue.";
+    if (submit) submit.disabled = true;
+    return;
+  }
+  if (selected > limit) {
+    card.classList.add("blocked");
+    message.textContent = `You selected ${selected} PDFs, which exceeds your limit. Remove files or contact Movanta.`;
+    if (submit) submit.disabled = true;
+    return;
+  }
+  if (selected > 0 && remaining <= 3) {
+    card.classList.add("warning");
+    message.textContent = remaining === 0
+      ? "This batch uses your full upload capacity."
+      : `Upload capacity is low: ${remaining} slot${remaining === 1 ? "" : "s"} left in this batch.`;
+    if (submit) submit.disabled = false;
+    return;
+  }
+  card.classList.add("ready");
+  message.textContent = selected
+    ? `${selected} PDF${selected === 1 ? "" : "s"} selected for extraction.`
+    : "Choose PDFs to see remaining upload slots.";
+  if (submit) submit.disabled = false;
 }
 
 function renderTable() {
@@ -321,7 +409,7 @@ async function bootstrap() {
     setUser(user);
     show("dashboardView");
   } catch {
-    show("loginView");
+    show("homeView");
   } finally {
     showLoader(false);
   }
@@ -353,11 +441,31 @@ $("logoutBtn").addEventListener("click", async () => {
   showLoader(true, "Signing out");
   try {
     await api("/api/auth/logout", { method: "POST" });
-    location.reload();
+    signOutUser();
+    show("homeView");
+    toast("Signed out");
   } catch (error) {
     showLoader(false);
     toast(error.message, true);
   }
+});
+
+$("homeNavBtn").addEventListener("click", () => show("homeView"));
+$("toolsNavBtn").addEventListener("click", () => $("toolsSection").scrollIntoView({ behavior: "smooth" }));
+$("loginNavBtn").addEventListener("click", () => show("loginView"));
+$("heroLoginBtn").addEventListener("click", () => show("loginView"));
+$("heroToolBtn").addEventListener("click", openBookingTool);
+$("toolHomeBtn").addEventListener("click", openBookingTool);
+
+document.querySelectorAll("[data-tool]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const tool = button.dataset.tool;
+    if (tool === "booking") {
+      openBookingTool();
+      return;
+    }
+    showComingSoon(tool === "rates" ? "Rates Comparison" : "Documentation Accuracy Checker");
+  });
 });
 
 $("changePasswordBtn").addEventListener("click", () => openModal("changePasswordModal"));
@@ -387,6 +495,10 @@ $("uploadForm").addEventListener("submit", async (event) => {
   event.preventDefault();
   const files = Array.from($("pdfInput").files || []);
   if (!files.length) return toast("Choose at least one PDF", true);
+  if (!currentUser?.isAdmin && files.length > Number(currentUser?.uploadLimit || 0)) {
+    updateUploadLimitCard();
+    return toast("Upload limit exceeded. Contact Movanta or remove files.", true);
+  }
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
   showLoader(true, "Preparing upload");
@@ -401,6 +513,8 @@ $("uploadForm").addEventListener("submit", async (event) => {
     showLoader(false);
   }
 });
+
+$("pdfInput").addEventListener("change", updateUploadLimitCard);
 
 $("downloadCsvBtn").addEventListener("click", () => {
   if (!rows.length) return;

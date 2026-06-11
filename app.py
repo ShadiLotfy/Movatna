@@ -240,6 +240,10 @@ def unique_username_from_email(email: str) -> str:
     return candidate
 
 
+def username_owner(username: str) -> AuthorizedUser | None:
+    return AuthorizedUser.query.filter(func.lower(AuthorizedUser.username) == username).first()
+
+
 def ensure_admin_user() -> None:
     admin_email = normalize_email(require_env("ADMIN_EMAIL"))
     admin_password = require_env("ADMIN_PASSWORD")
@@ -489,8 +493,25 @@ def register_routes(app: Flask) -> None:
             return jsonify({"error": "Upload limit must be a number from 1 to 500"}), 400
         existing_email = AuthorizedUser.query.filter(func.lower(AuthorizedUser.email) == email).first()
         if existing_email:
-            return jsonify({"error": "Email already exists"}), 409
-        existing_username = AuthorizedUser.query.filter(func.lower(AuthorizedUser.username) == username).first()
+            if not existing_email.is_deleted:
+                return jsonify({"error": "Email already exists"}), 409
+            existing_username = username_owner(username)
+            if existing_username and existing_username.id != existing_email.id:
+                return jsonify({"error": "Username already exists"}), 409
+            generated_password = generate_password()
+            existing_email.username = username
+            existing_email.full_name = full_name
+            existing_email.role = role
+            existing_email.is_admin = role == "admin"
+            existing_email.is_active = True
+            existing_email.is_deleted = False
+            existing_email.password_hash = hash_password(generated_password)
+            existing_email.upload_limit = upload_limit
+            existing_email.password_changed_at = None
+            existing_email.updated_at = utcnow()
+            db.session.commit()
+            return jsonify({"user": public_user(existing_email), "generatedPassword": generated_password}), 201
+        existing_username = username_owner(username)
         if existing_username:
             return jsonify({"error": "Username already exists"}), 409
 

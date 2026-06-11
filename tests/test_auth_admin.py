@@ -72,6 +72,63 @@ class AuthAdminTests(unittest.TestCase):
         response = self.client.post("/api/admin/users", json=payload)
         self.assertEqual(response.status_code, 409)
 
+    def test_admin_can_remove_and_readd_user_email(self):
+        self.admin_login()
+        payload = {
+            "name": "Reusable User",
+            "email": "reuse@example.com",
+            "username": "reuse",
+            "role": "user",
+            "uploadLimit": 2,
+        }
+        create = self.client.post("/api/admin/users", json=payload)
+        self.assertEqual(create.status_code, 201, create.get_data(as_text=True))
+        user_id = create.get_json()["user"]["id"]
+
+        delete = self.client.delete(f"/api/admin/users/{user_id}")
+        self.assertEqual(delete.status_code, 200, delete.get_data(as_text=True))
+
+        payload["name"] = "Reusable User Again"
+        payload["uploadLimit"] = 7
+        recreate = self.client.post("/api/admin/users", json=payload)
+        self.assertEqual(recreate.status_code, 201, recreate.get_data(as_text=True))
+        data = recreate.get_json()
+        self.assertEqual(data["user"]["id"], user_id)
+        self.assertEqual(data["user"]["uploadLimit"], 7)
+        self.assertFalse(data["user"]["isDeleted"])
+        self.assertTrue(data["user"]["isActive"])
+
+        self.client.post("/api/auth/logout")
+        login = self.client.post(
+            "/api/auth/login",
+            json={"identifier": "reuse@example.com", "password": data["generatedPassword"]},
+        )
+        self.assertEqual(login.status_code, 200, login.get_data(as_text=True))
+
+    def test_disabled_user_cannot_login(self):
+        self.admin_login()
+        create = self.client.post(
+            "/api/admin/users",
+            json={
+                "name": "Disabled User",
+                "email": "disabled@example.com",
+                "username": "disabled",
+                "role": "user",
+                "uploadLimit": 3,
+            },
+        )
+        self.assertEqual(create.status_code, 201, create.get_data(as_text=True))
+        data = create.get_json()
+        update = self.client.patch(f"/api/admin/users/{data['user']['id']}", json={"isActive": False})
+        self.assertEqual(update.status_code, 200, update.get_data(as_text=True))
+
+        self.client.post("/api/auth/logout")
+        login = self.client.post(
+            "/api/auth/login",
+            json={"identifier": "disabled", "password": data["generatedPassword"]},
+        )
+        self.assertEqual(login.status_code, 403)
+
     def test_change_password(self):
         self.admin_login()
         response = self.client.post(
