@@ -20,6 +20,7 @@ from flask import Flask, jsonify, make_response, render_template, request
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 from sqlalchemy import func
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from werkzeug.utils import secure_filename
 
 from booking_extractor import export_booking_data
@@ -118,10 +119,21 @@ def database_uri() -> str:
     return raw
 
 
+def sqlalchemy_engine_options(uri: str) -> dict[str, int | bool]:
+    if not uri.startswith("postgresql"):
+        return {}
+    return {
+        "pool_pre_ping": True,
+        "pool_recycle": int(os.environ.get("DB_POOL_RECYCLE_SECONDS", "300")),
+    }
+
+
 def create_app() -> Flask:
+    db_uri = database_uri()
     app = Flask(__name__, instance_path=str(BASE_DIR / "instance"))
     app.config.update(
-        SQLALCHEMY_DATABASE_URI=database_uri(),
+        SQLALCHEMY_DATABASE_URI=db_uri,
+        SQLALCHEMY_ENGINE_OPTIONS=sqlalchemy_engine_options(db_uri),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         MAX_CONTENT_LENGTH=MAX_CONTENT_LENGTH,
         JSON_SORT_KEYS=False,
@@ -134,6 +146,7 @@ def create_app() -> Flask:
         ensure_admin_user()
 
     register_security_hooks(app)
+    register_error_handlers(app)
     register_routes(app)
     return app
 
@@ -348,6 +361,16 @@ def register_security_hooks(app: Flask) -> None:
         response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         return response
+
+
+def register_error_handlers(app: Flask) -> None:
+    @app.errorhandler(SQLAlchemyError)
+    def handle_database_error(exc: SQLAlchemyError):
+        db.session.rollback()
+        if isinstance(exc, OperationalError):
+            db.engine.dispose()
+        app.logger.exception("Database error")
+        return jsonify({"error": "Database temporarily unavailable. Please try again."}), 503
 
 
 def register_routes(app: Flask) -> None:

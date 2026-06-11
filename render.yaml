@@ -20,6 +20,8 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      - key: DB_POOL_RECYCLE_SECONDS
+        value: "300"
       - key: EMAIL_SERVICE_API_KEY
         sync: false
       - key: EMAIL_FROM
