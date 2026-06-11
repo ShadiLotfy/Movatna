@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: movanta
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.4
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: FLASK_ENV
+        value: production
+      - key: PYTHON_ENV
+        value: production
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: EMAIL_SERVICE_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: SMTP_HOST
+        value: smtp.office365.com
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USERNAME
+        value: movantaa@outlook.com
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: JWT_SECRET
+        sync: false

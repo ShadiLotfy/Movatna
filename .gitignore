@@ -1,0 +1,25 @@
+.env
+.env.*
+!.env.example
+instance/*.sqlite3
+instance/*.db
+node_modules/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.DS_Store
+Thumbs.db
+*.log
+*.pdf
+/booking-extractor*.html
+/index.html
+/Start Movanta.bat
+.vercel/
+.netlify/
+dist/
+build/
+coverage/
+*.tmp
