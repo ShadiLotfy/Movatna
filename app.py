@@ -307,11 +307,12 @@ def processed_booking_history(normalized_booking: str) -> UploadHistory | None:
     )
 
 
-def partition_duplicate_bookings(files, rows: list[dict]) -> tuple[list, list[dict], list, list[dict], list[dict]]:
+def partition_duplicate_bookings(files, rows: list[dict]) -> tuple[list, list[dict], list, list[dict], list[dict], list[dict]]:
     new_files = []
     new_rows = []
     duplicate_files = []
     duplicate_rows = []
+    display_rows = []
     skipped = []
     current_batch: dict[str, dict] = {}
 
@@ -326,21 +327,30 @@ def partition_duplicate_bookings(files, rows: list[dict]) -> tuple[list, list[di
             if file:
                 duplicate_files.append(file)
             duplicate_rows.append(row)
-            skipped.append(
-                {
-                    "fileName": secure_filename(file.filename or "") if file else "",
-                    "bookingNo": booking_number or existing_detail.get("bookingNo", ""),
-                    "line": existing_detail.get("line") or row.get("Line") or "Unknown",
-                    "previousProcessedAt": existing_detail.get("previousProcessedAt"),
-                    "status": existing_detail.get("status") or "success",
-                    "message": "This booking has already been processed before.",
-                }
+            previous_at = existing_detail.get("previousProcessedAt")
+            previous_status = existing_detail.get("status") or "success"
+            skipped_item = {
+                "fileName": secure_filename(file.filename or "") if file else "",
+                "bookingNo": booking_number or existing_detail.get("bookingNo", ""),
+                "line": existing_detail.get("line") or row.get("Line") or "Unknown",
+                "previousProcessedAt": previous_at,
+                "status": previous_status,
+                "message": "This booking has already been processed before.",
+            }
+            skipped.append(skipped_item)
+            duplicate_display = dict(row)
+            duplicate_display["Comments"] = (
+                f"Already processed. Previous status: {previous_status}."
+                + (f" Previous processing date: {previous_at}." if previous_at else "")
             )
+            duplicate_display["Client"] = duplicate_display.get("Client", "")
+            display_rows.append(duplicate_display)
             continue
 
         if file:
             new_files.append(file)
         new_rows.append(row)
+        display_rows.append(row)
         if normalized_booking:
             current_batch[normalized_booking] = {
                 "bookingNo": booking_number,
@@ -349,7 +359,7 @@ def partition_duplicate_bookings(files, rows: list[dict]) -> tuple[list, list[di
                 "status": "success",
             }
 
-    return new_files, new_rows, duplicate_files, duplicate_rows, skipped
+    return new_files, new_rows, duplicate_files, duplicate_rows, skipped, display_rows
 
 
 def record_upload_history(user: AuthorizedUser, files, rows: list[dict] | None = None, status: str = "success") -> None:
@@ -850,7 +860,7 @@ def register_routes(app: Flask) -> None:
                 for row, source in zip(rows, files):
                     if (source.filename or "").lower() == "latt trading.pdf":
                         row["Line"] = "LATT"
-                new_files, new_rows, duplicate_files, duplicate_rows, skipped = partition_duplicate_bookings(files, rows)
+                new_files, new_rows, duplicate_files, duplicate_rows, skipped, display_rows = partition_duplicate_bookings(files, rows)
                 if new_files:
                     record_upload_history(user, new_files, new_rows, "success")
                 if duplicate_files:
@@ -858,7 +868,7 @@ def register_routes(app: Flask) -> None:
                 db.session.commit()
                 return jsonify(
                     {
-                        "rows": new_rows,
+                        "rows": display_rows,
                         "summary": {
                             "processed": len(new_rows),
                             "skipped": len(skipped),

@@ -12,7 +12,9 @@
     "ETA POD / Arrival Date": "05/02/2026",
     "SI & VGM Cut Off (Calculated)": "26/01/2026",
     "Assigning Cut Off (Calculated)": "25/01/2026",
-    "Gate In Cut Off (Calculated)": "26/01/2026"
+    "Gate In Cut Off (Calculated)": "26/01/2026",
+    "Client": "",
+    "Comments": ""
   },
   "CMACGM NEW.pdf": {
     "Line": "CMA CGM",
@@ -27,7 +29,9 @@
     "ETA POD / Arrival Date": "25/06/2026",
     "SI & VGM Cut Off (Calculated)": "08/06/2026",
     "Assigning Cut Off (Calculated)": "07/06/2026",
-    "Gate In Cut Off (Calculated)": "08/06/2026"
+    "Gate In Cut Off (Calculated)": "08/06/2026",
+    "Client": "",
+    "Comments": ""
   },
   "CMACGM.pdf": {
     "Line": "CMA CGM",
@@ -42,7 +46,9 @@
     "ETA POD / Arrival Date": "23/02/2026",
     "SI & VGM Cut Off (Calculated)": "22/01/2026",
     "Assigning Cut Off (Calculated)": "21/01/2026",
-    "Gate In Cut Off (Calculated)": "22/01/2026"
+    "Gate In Cut Off (Calculated)": "22/01/2026",
+    "Client": "",
+    "Comments": ""
   },
   "HAPAG.pdf": {
     "Line": "Hapag-Lloyd",
@@ -57,7 +63,9 @@
     "ETA POD / Arrival Date": "18/06/2026",
     "SI & VGM Cut Off (Calculated)": "28/05/2026",
     "Assigning Cut Off (Calculated)": "27/05/2026",
-    "Gate In Cut Off (Calculated)": "28/05/2026"
+    "Gate In Cut Off (Calculated)": "28/05/2026",
+    "Client": "",
+    "Comments": ""
   },
   "LATT Trading.pdf": {
     "Line": "LATT",
@@ -72,7 +80,9 @@
     "ETA POD / Arrival Date": "N/A",
     "SI & VGM Cut Off (Calculated)": "22/04/2026",
     "Assigning Cut Off (Calculated)": "21/04/2026",
-    "Gate In Cut Off (Calculated)": "22/04/2026"
+    "Gate In Cut Off (Calculated)": "22/04/2026",
+    "Client": "",
+    "Comments": ""
   },
   "MAERSK.pdf": {
     "Line": "Maersk",
@@ -87,7 +97,9 @@
     "ETA POD / Arrival Date": "27/02/2026",
     "SI & VGM Cut Off (Calculated)": "26/01/2026",
     "Assigning Cut Off (Calculated)": "25/01/2026",
-    "Gate In Cut Off (Calculated)": "26/01/2026"
+    "Gate In Cut Off (Calculated)": "26/01/2026",
+    "Client": "",
+    "Comments": ""
   },
   "MSC.pdf": {
     "Line": "MSC",
@@ -102,7 +114,9 @@
     "ETA POD / Arrival Date": "02/02/2026",
     "SI & VGM Cut Off (Calculated)": "29/01/2026",
     "Assigning Cut Off (Calculated)": "28/01/2026",
-    "Gate In Cut Off (Calculated)": "29/01/2026"
+    "Gate In Cut Off (Calculated)": "29/01/2026",
+    "Client": "",
+    "Comments": ""
   },
   "ONEYALYG04399500.pdf": {
     "Line": "ONE",
@@ -117,12 +131,14 @@
     "ETA POD / Arrival Date": "23/06/2026",
     "SI & VGM Cut Off (Calculated)": "10/05/2026",
     "Assigning Cut Off (Calculated)": "07/05/2026",
-    "Gate In Cut Off (Calculated)": "10/05/2026"
+    "Gate In Cut Off (Calculated)": "10/05/2026",
+    "Client": "",
+    "Comments": ""
   },
   "YML.pdf": {
     "Line": "Yang Ming",
     "Booking No.": "YMEG00089685",
-    "Equipment": "1 x 40'HC",
+    "Equipment": "1 x 40'HQ",
     "Vessel Name": "YM WORLD",
     "Voyage No.": "048W",
     "Port of Loading": "Damietta",
@@ -132,6 +148,8 @@
     "ETA POD / Arrival Date": "27/05/2026",
     "SI & VGM Cut Off (Calculated)": "14/05/2026",
     "Assigning Cut Off (Calculated)": "13/05/2026",
-    "Gate In Cut Off (Calculated)": "14/05/2026"
+    "Gate In Cut Off (Calculated)": "14/05/2026",
+    "Client": "",
+    "Comments": ""
   }
 }

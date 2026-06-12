@@ -2,7 +2,7 @@ import json
 import unittest
 from pathlib import Path
 
-from booking_extractor import SCHEMA, calculated_cutoffs, export_booking_data, format_equipment, parse_booking_pdf
+from booking_extractor import SCHEMA, calculated_cutoffs, clean_port, export_booking_data, format_equipment, parse_booking_pdf
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -75,10 +75,17 @@ class BookingExtractorTests(unittest.TestCase):
             "3 40HCX": "3 x 40'HC",
             "15x45GP": "15 x 40'HC",
             "1 x 20'ST": "1 x 20'GP",
+            "2 x 40HQ": "2 x 40'HQ",
+            "3 x 40'HQ": "3 x 40'HQ",
+            "4 x 40'HC": "4 x 40'HC",
         }
         for raw, expected in examples.items():
             with self.subTest(raw=raw):
                 self.assertEqual(format_equipment(raw), expected)
+
+    def test_port_normalization_repairs_rio_grande_spacing(self):
+        self.assertEqual(clean_port("Rio Gr Ande"), "Rio Grande")
+        self.assertEqual(clean_port("RIO GRANDE / BRAZIL"), "Rio Grande")
 
 
 if __name__ == "__main__":

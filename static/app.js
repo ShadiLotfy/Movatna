@@ -12,6 +12,8 @@ const schema = [
   "SI & VGM Cut Off (Calculated)",
   "Assigning Cut Off (Calculated)",
   "Gate In Cut Off (Calculated)",
+  "Client",
+  "Comments",
 ];
 
 let currentUser = null;
@@ -20,6 +22,7 @@ let users = [];
 let analytics = null;
 let activeTab = "dashboard";
 let analyticsPollTimer = null;
+let selectedFiles = [];
 let loaderProgress = 0;
 let loaderTimer = null;
 let loaderHideTimer = null;
@@ -283,6 +286,7 @@ function signOutUser() {
   currentUser = null;
   stopAnalyticsPolling();
   rows = [];
+  selectedFiles = [];
   $("pdfInput").value = "";
   $("adminTab").classList.add("hidden");
   $("userAdminBtn").classList.add("hidden");
@@ -313,8 +317,7 @@ function updateUploadLimitCard() {
   const meter = $("uploadLimitMeter");
   const message = $("uploadLimitMessage");
   const submit = $("extractSubmitBtn");
-  const input = $("pdfInput");
-  const selected = Array.from(input?.files || []).length;
+  const selected = getSelectedFiles().length;
 
   card.classList.remove("warning", "blocked", "ready");
   if (!currentUser) {
@@ -371,8 +374,20 @@ function updateFileCount() {
   const input = $("pdfInput");
   const label = $("fileCountLabel");
   if (!input || !label) return;
-  const count = Array.from(input.files || []).length;
-  label.textContent = count ? `${count} file${count === 1 ? "" : "s"} selected` : "No files selected";
+  const files = getSelectedFiles();
+  const count = files.length;
+  const names = files.slice(0, 3).map((file) => file.name).join(", ");
+  label.textContent = count ? `${count} file${count === 1 ? "" : "s"} selected${names ? `: ${names}${count > 3 ? ", ..." : ""}` : ""}` : "No files selected";
+}
+
+function getSelectedFiles() {
+  return selectedFiles.length ? selectedFiles : Array.from($("pdfInput")?.files || []);
+}
+
+function setSelectedFiles(files) {
+  selectedFiles = Array.from(files || []).filter((file) => /\.pdf$/i.test(file.name || "") || file.type === "application/pdf");
+  updateFileCount();
+  updateUploadLimitCard();
 }
 
 function renderTable() {
@@ -681,7 +696,7 @@ $("changePasswordForm").addEventListener("submit", async (event) => {
 
 $("uploadForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const files = Array.from($("pdfInput").files || []);
+  const files = getSelectedFiles();
   if (!files.length) return toast("Choose at least one PDF", true);
   if (!currentUser?.isAdmin && files.length > Number(currentUser?.uploadLimit || 0)) {
     updateUploadLimitCard();
@@ -711,13 +726,53 @@ $("uploadForm").addEventListener("submit", async (event) => {
 });
 
 $("pdfInput").addEventListener("change", () => {
+  selectedFiles = [];
   updateFileCount();
   updateUploadLimitCard();
 });
 
+$("fileDropZone").addEventListener("dragover", (event) => {
+  event.preventDefault();
+  $("fileDropZone").classList.add("dragging");
+});
+
+$("fileDropZone").addEventListener("dragleave", () => {
+  $("fileDropZone").classList.remove("dragging");
+});
+
+$("fileDropZone").addEventListener("drop", (event) => {
+  event.preventDefault();
+  $("fileDropZone").classList.remove("dragging");
+  setSelectedFiles(event.dataTransfer?.files || []);
+});
+
 $("downloadCsvBtn").addEventListener("click", () => {
   if (!rows.length) return;
-  const csv = [schema.join(","), ...rows.map((row) => schema.map((h) => csvCell(row[h] || "")).join(","))].join("\n");
+  renderExportColumns();
+  openModal("exportColumnsModal");
+});
+
+$("confirmExportBtn").addEventListener("click", () => {
+  const selectedColumns = Array.from(document.querySelectorAll("[data-export-column]:checked")).map((input) => input.value);
+  if (!selectedColumns.length) return toast("Select at least one column to export.", true);
+  closeModal("exportColumnsModal");
+  downloadCsv(selectedColumns);
+});
+
+function renderExportColumns() {
+  $("exportColumnList").innerHTML = schema
+    .map(
+      (column) => `
+        <label class="checkbox-row export-column">
+          <input data-export-column type="checkbox" value="${escapeHtml(column)}" checked />
+          <span>${escapeHtml(column)}</span>
+        </label>`
+    )
+    .join("");
+}
+
+function downloadCsv(columns) {
+  const csv = [columns.join(","), ...rows.map((row) => columns.map((h) => csvCell(row[h] || "")).join(","))].join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -725,7 +780,7 @@ $("downloadCsvBtn").addEventListener("click", () => {
   a.download = `movanta-bookings-${new Date().toISOString().slice(0, 10)}.csv`;
   a.click();
   URL.revokeObjectURL(url);
-});
+}
 
 $("copyAllBtn").addEventListener("click", async () => {
   if (!rows.length) return;

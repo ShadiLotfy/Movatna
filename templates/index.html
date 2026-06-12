@@ -202,16 +202,17 @@ Shipping.</h1>
               <h2>Process booking PDFs</h2>
             </div>
             <form id="uploadForm" class="upload-form">
-              <label class="file-picker">
+              <label id="fileDropZone" class="file-picker">
                 <span>Booking PDFs</span>
                 <input id="pdfInput" class="file-input" type="file" accept=".pdf,application/pdf" multiple />
                 <span class="file-control" aria-hidden="true">
-                  <strong>Choose Files</strong>
+                  <strong>Drop PDFs here or choose files</strong>
                   <small id="fileCountLabel">No files selected</small>
                 </span>
               </label>
               <button id="extractSubmitBtn" class="primary-btn" type="submit">Extract PDFs</button>
             </form>
+            <div class="security-note">Your data is secure. No one can access your uploaded files or extracted data except you.</div>
             <div id="uploadLimitCard" class="upload-limit-card">
               <div>
                 <span>Batch Capacity</span>
@@ -425,6 +426,17 @@ Shipping.</h1>
         </div>
         <div id="modalPreview" class="plain-preview"></div>
         <button id="modalCopyBtn" class="primary-btn" type="button">Copy to Clipboard</button>
+      </div>
+    </div>
+
+    <div id="exportColumnsModal" class="modal-overlay hidden">
+      <div class="modal-box">
+        <div class="modal-title">
+          <span>Select Export Columns</span>
+          <button class="modal-close" data-close-modal="exportColumnsModal" type="button">x</button>
+        </div>
+        <div id="exportColumnList" class="export-column-list"></div>
+        <button id="confirmExportBtn" class="primary-btn" type="button">Download CSV</button>
       </div>
     </div>
 

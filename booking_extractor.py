@@ -42,6 +42,8 @@ SCHEMA = [
     "SI & VGM Cut Off (Calculated)",
     "Assigning Cut Off (Calculated)",
     "Gate In Cut Off (Calculated)",
+    "Client",
+    "Comments",
 ]
 
 DATE_RE = (
@@ -55,6 +57,25 @@ def read_pdf_text(path: str | Path) -> str:
     """Extract text with pypdf. Keeps page breaks for label proximity."""
     reader = PdfReader(str(path))
     return "\n".join(page.extract_text() or "" for page in reader.pages)
+
+
+def read_pdf_text_with_optional_ocr(path: str | Path) -> str:
+    text = read_pdf_text(path)
+    if len(re.sub(r"\s+", "", text or "")) >= 120:
+        return text
+    try:
+        from pdf2image import convert_from_path
+        import pytesseract
+    except ImportError:
+        logger.info("OCR fallback unavailable for %s; pdf2image/pytesseract is not installed", path)
+        return text
+    try:
+        pages = convert_from_path(str(path), dpi=220)
+        ocr_text = "\n".join(pytesseract.image_to_string(page) for page in pages)
+    except Exception as exc:
+        logger.warning("OCR fallback failed for %s: %s", path, exc)
+        return text
+    return ocr_text if len(re.sub(r"\s+", "", ocr_text or "")) > len(re.sub(r"\s+", "", text or "")) else text
 
 
 def normalize_text(text: str) -> str:
@@ -84,6 +105,7 @@ def normalize_text(text: str) -> str:
         (r"\bET\s*A\b", "ETA"),
         (r"\bB\s+r\s*azi\s*l\b", "Brazil"),
         (r"\bSao\s+P\s+aulo\b", "Sao Paulo"),
+        (r"\bRio\s+Gr\s+Ande\b", "Rio Grande"),
     ]
     for pattern, repl in repairs:
         text = re.sub(pattern, repl, text, flags=re.I)
@@ -207,6 +229,8 @@ def clean_port(value: str) -> str:
         return "Port Said West"
     if re.search(r"port\s*said|p\.said|scct", value, flags=re.I):
         return "Port Said"
+    if re.search(r"\brio\s+gr\s*ande\b|\brio\s+grande\b", value, flags=re.I):
+        return "Rio Grande"
     value = re.split(r"[/,]", value)[0]
     value = re.sub(
         r"\b(terminal|container|handling|depot|hub|yard|cfs|cy|berth|pier|dock|cont\.?|cargo|company|co\.?|egypt|italy|brazil)\b.*",
@@ -239,14 +263,16 @@ def format_equipment(raw: str) -> str:
         size = "40" if m.group(1) == "45" else m.group(1)
         return f"{m.group(2)} x {size}'HC"
 
-    m = re.search(r"(\d+)\s*[xX]\s*(20|40|45)['\"]?\s*(ST|DRY|GP|HC|HQ|HCX|HIGH\s*CUBE|HI.?CUBE)", raw, flags=re.I)
+    m = re.search(r"(\d+)\s*[xX]\s*(20|40|45)['\"]?\s*(ST|DRY|GP|HC|HQ|HIGH\s*CUBE|HI.?CUBE)", raw, flags=re.I)
     if m:
         qty, size, typ = m.group(1), m.group(2), re.sub(r"\s+", "", m.group(3)).upper()
         if size == "45":
             size, typ = "40", "HC"
         elif typ in {"ST", "DRY", "GP"}:
             typ = "GP"
-        elif typ in {"HQ", "HCX", "HICUBE", "HI-CUBE", "HIGHCUBE"}:
+        elif typ == "HQ":
+            typ = "HQ"
+        elif typ in {"HICUBE", "HI-CUBE", "HIGHCUBE"}:
             typ = "HC"
         return f"{qty} x {size}'{typ}"
 
@@ -257,10 +283,11 @@ def format_equipment(raw: str) -> str:
 
     m = re.search(r"\b(\d+)\s*(20|40)(HCX|HC|HQ|GP|ST)\b", raw, flags=re.I)
     if m:
-        typ = "HC" if re.search(r"HC|HQ", m.group(3), flags=re.I) else "GP"
+        raw_type = m.group(3).upper()
+        typ = "HQ" if raw_type == "HQ" else "HC" if re.search(r"HC|HCX", raw_type, flags=re.I) else "GP"
         return f"{m.group(1)} x {m.group(2)}'{typ}"
 
-    m = re.search(r"\b(20|40)(HC|GP)\b.*?\b(\d+)\s+N\b", raw, flags=re.I)
+    m = re.search(r"\b(20|40)(HC|HQ|GP)\b.*?\b(\d+)\s+N\b", raw, flags=re.I)
     if m:
         return f"{m.group(3)} x {m.group(1)}'{m.group(2).upper()}"
 
@@ -485,10 +512,18 @@ def extract_msc_booking_no(s: str) -> str:
 
 def parse_msc(text: str) -> dict[str, str]:
     s = one_line(text)
-    equip_type = first_match(s, [r"EQUIP\.TYPE/NUMBER.*?(?:^|[^A-Z0-9])(40HC|40GP|20GP|20HC)", r"(40HC|40GP|20GP|20HC)\s+DEHUMIDIFICATION"])
+    equip_type = first_match(
+        s,
+        [
+            r"EQUIP\.TYPE/NUMBER.*?(?:^|[^A-Z0-9])(40HQ|40HC|40GP|20GP|20HC)",
+            r"(40HQ|40HC|40GP|20GP|20HC)\s+DEHUMIDIFICATION",
+            r"\b(40HQ|40HC|40GP|20GP|20HC)\b",
+        ],
+    )
     qty = (
-        first_match(s, [r"\b(40HC|40GP|20GP|20HC)\b.*?\b([0-9]+)\s+N\s+%"], 2)
-        or first_match(s, [r"\b(40HC|40GP|20GP|20HC)\b.*?cbm/h\s+0\s*([0-9]+)\s+N"], 2)
+        first_match(s, [r"\b(40HQ|40HC|40GP|20GP|20HC)\b.*?\b([0-9]+)\s+N\s+%"], 2)
+        or first_match(s, [r"\b(40HQ|40HC|40GP|20GP|20HC)\b.*?cbm/h\s+0\s*([0-9]+)\s+N"], 2)
+        or first_match(s, [r"(?:QTY|QUANTITY|BOOKED).*?\b([0-9]+)\s*(?:x|X)?\s*(?:40HQ|40HC|40GP|20GP|20HC)"])
         or first_match(s, [r"DRYGIOIA TAURO\s+\d+\s+\d+\s+\d+\s+([0-9]+)TERNI"])
     )
     eta_pod = first_match(
@@ -497,19 +532,29 @@ def parse_msc(text: str) -> dict[str, str]:
             r"CIVITAVECCHIA\s+AG604R\s+(\d{2}/\d{2}/\d{4})\s+05:00",
             r"AG604R\s+(\d{2}/\d{2}/\d{4})\s+05:00",
             r"PORT OF DISCHARGE.*?CIVITAVECCHIA.*?(\d{2}/\d{2}/\d{4})\s+05:00",
+            rf"PORT OF DISCHARGE.*?CIVITAVECCHIA.*?({DATE_RE})",
         ],
     )
+    vessel = first_match(
+        s,
+        [
+            r"PORT SAID WEST\s+(MSC [A-Z0-9 ]+?)\s+\([^)]*\)\s*/\s*[A-Z]+\s*CIVITAVECCHIA",
+            r"PORT SAID WEST\s+(MSC [A-Z0-9 ]+?)\s+CIVITAVECCHIA",
+            r"VESSEL(?:\s+NAME)?\s*:?\s*(MSC [A-Z0-9 ]+?)\s+(?:VOY|VOYAGE|PORT|ETA|ETD)",
+        ],
+    )
+    voyage = first_match(s, [r"CIVITAVECCHIA\s*([A-Z0-9]+)\s*(?:\d{2}/\d{2}/\d{4})", r"VOY(?:AGE)?\.?\s*:?\s*([A-Z0-9]+)"])
     record = base_record("MSC")
     record.update(
         {
             "Booking No.": extract_msc_booking_no(s),
             "Equipment": f"{qty} x {equip_type}" if qty and equip_type else equip_type,
-            "Vessel Name": first_match(s, [r"PORT SAID WEST\s+(MSC [A-Z0-9 ]+?)\s+\([^)]*\)\s*/\s*[A-Z]+\s*CIVITAVECCHIA", r"PORT SAID WEST\s+(MSC [A-Z0-9 ]+?)\s+CIVITAVECCHIA"]),
-            "Voyage No.": first_match(s, [r"CIVITAVECCHIA\s*([A-Z0-9]+)\s*(?:\d{2}/\d{2}/\d{4})"]),
+            "Vessel Name": vessel,
+            "Voyage No.": voyage,
             "Port of Loading": "Port Said West",
             "Port of Discharge": "Civitavecchia",
             "Final Dest.": first_match(s, [r"GIOIA TAURO.*?([A-Z ]+,\s*ITALY)\s+REEFER"]) or "Terni, Italy",
-            "ETS POL / Sailing Date": first_match(s, [r"AG604R\s*(\d{2}/\d{2}/\d{4})\s+05:00", r"EST\. TIME OF ARRIVAL/DEPARTURE.*?(\d{2}/\d{2}/\d{4})\s+05:00"]),
+            "ETS POL / Sailing Date": first_match(s, [r"AG604R\s*(\d{2}/\d{2}/\d{4})\s+05:00", r"EST\. TIME OF ARRIVAL/DEPARTURE.*?(\d{2}/\d{2}/\d{4})\s+05:00", rf"PORT OF LOADING.*?({DATE_RE})"]),
             "ETA POD / Arrival Date": eta_pod or "N/A",
         }
     )
@@ -591,7 +636,7 @@ PARSERS = {
 
 def parse_booking_pdf(path: str | Path) -> dict[str, str]:
     path = Path(path)
-    text = read_pdf_text(path)
+    text = read_pdf_text_with_optional_ocr(path)
     line = detect_line(text)
     parser = PARSERS.get(line, parse_shipping_order)
     row = parser(text)
