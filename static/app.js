@@ -17,6 +17,7 @@ const schema = [
 let currentUser = null;
 let rows = [];
 let users = [];
+let analytics = null;
 let loaderProgress = 0;
 let loaderTimer = null;
 let loaderHideTimer = null;
@@ -707,14 +708,71 @@ function setTab(tab) {
 async function loadUsers(showProgress = true) {
   if (showProgress) showLoader(true, "Loading users");
   try {
-    const data = await api("/api/admin/users");
+    const [userData, analyticsData] = await Promise.all([api("/api/admin/users"), api("/api/admin/analytics")]);
+    const data = userData;
     users = data.users || [];
+    analytics = analyticsData;
     renderUsers();
+    renderAnalytics();
   } catch (error) {
     toast(error.message, true);
   } finally {
     if (showProgress) showLoader(false);
   }
+}
+
+function renderAnalytics() {
+  if (!analytics) return;
+  const kpis = analytics.kpis || {};
+  const mostLine = kpis.mostUsedShippingLine || { line: "No data", count: 0 };
+  const cards = [
+    ["Total Users", kpis.totalUsers ?? 0],
+    ["Active Users", kpis.activeUsers ?? 0],
+    ["Disabled / Deleted", kpis.disabledDeletedUsers ?? 0],
+    ["Total Uploads", kpis.totalUploadsProcessed ?? 0],
+    ["Today", kpis.uploadsToday ?? 0],
+    ["This Month", kpis.uploadsThisMonth ?? 0],
+    ["Most Used Line", `${mostLine.line} (${mostLine.count})`],
+    ["No Uploads Left", kpis.usersWithNoUploadsLeft ?? 0],
+  ];
+  $("adminKpiGrid").innerHTML = cards
+    .map(([label, value]) => `<div class="kpi-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`)
+    .join("");
+
+  const maxLineCount = Math.max(1, ...(analytics.shippingLines || []).map((item) => item.count || 0));
+  $("shippingLineChart").innerHTML = (analytics.shippingLines || []).length
+    ? analytics.shippingLines
+        .map(
+          (item) => `
+            <div class="line-row">
+              <div><strong>${escapeHtml(item.line)}</strong><span>${escapeHtml(item.count)} uploads</span></div>
+              <i style="transform:scaleX(${Math.max(0.04, (item.count || 0) / maxLineCount)})"></i>
+            </div>`
+        )
+        .join("")
+    : `<div class="empty-state">No upload history yet.</div>`;
+
+  $("userUsageList").innerHTML = (analytics.users || [])
+    .map((user) => {
+      const status = user.isDeleted ? "Deleted" : user.isActive ? "Active" : "Disabled";
+      const remaining = Number(user.uploadsRemaining || 0);
+      const cls = remaining === 0 ? "empty" : remaining <= 3 ? "low" : "";
+      return `
+        <div class="usage-row ${cls}">
+          <div class="usage-main">
+            <strong>${escapeHtml(user.name || user.username || "-")}</strong>
+            <span>${escapeHtml(user.email)} / ${escapeHtml(user.role)} / ${status}</span>
+          </div>
+          <div class="usage-meta">
+            <span>${escapeHtml(user.uploadsUsed || 0)} used</span>
+            <span>${escapeHtml(user.uploadLimit || 0)} limit</span>
+            <span>${escapeHtml(remaining)} left</span>
+          </div>
+          <div class="usage-bar"><i style="transform:scaleX(${Math.min(1, Math.max(0, (user.usagePercent || 0) / 100))})"></i></div>
+        </div>`;
+    })
+    .join("");
+  enhanceRollingText();
 }
 
 function renderUsers() {

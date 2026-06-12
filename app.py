@@ -55,6 +55,17 @@ class AuthorizedUser(db.Model):
     password_changed_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
 
+class UploadHistory(db.Model):
+    __tablename__ = "upload_history"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("authorized_users.id"), nullable=False, index=True)
+    file_name = db.Column(db.String(255), nullable=False, default="")
+    extracted_line = db.Column(db.String(120), nullable=False, default="")
+    status = db.Column(db.String(16), nullable=False, default="success", index=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=lambda: utcnow(), nullable=False, index=True)
+
+
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -242,6 +253,89 @@ def unique_username_from_email(email: str) -> str:
 
 def username_owner(username: str) -> AuthorizedUser | None:
     return AuthorizedUser.query.filter(func.lower(AuthorizedUser.username) == username).first()
+
+
+def record_upload_history(user: AuthorizedUser, files, rows: list[dict] | None = None, status: str = "success") -> None:
+    rows = rows or []
+    for index, file in enumerate(files):
+        filename = secure_filename(file.filename or "")[:255]
+        line = ""
+        if index < len(rows):
+            line = str(rows[index].get("Line") or "")[:120]
+        db.session.add(
+            UploadHistory(
+                user_id=user.id,
+                file_name=filename,
+                extracted_line=line,
+                status=status,
+            )
+        )
+
+
+def upload_usage_for_user(user_id: int) -> int:
+    return int(
+        db.session.query(func.count(UploadHistory.id))
+        .filter(UploadHistory.user_id == user_id, UploadHistory.status == "success")
+        .scalar()
+        or 0
+    )
+
+
+def build_admin_analytics() -> dict:
+    users = AuthorizedUser.query.order_by(AuthorizedUser.created_at.desc(), AuthorizedUser.email.asc()).all()
+    histories = UploadHistory.query.order_by(UploadHistory.created_at.desc()).all()
+    now = utcnow()
+    today = now.date()
+
+    success_histories = [item for item in histories if item.status == "success"]
+    line_counts: dict[str, int] = {}
+    for item in success_histories:
+        line = (item.extracted_line or "Unknown").strip() or "Unknown"
+        line_counts[line] = line_counts.get(line, 0) + 1
+    shipping_lines = [
+        {"line": line, "count": count}
+        for line, count in sorted(line_counts.items(), key=lambda item: (-item[1], item[0].lower()))
+    ]
+    most_used_line = shipping_lines[0] if shipping_lines else {"line": "No data", "count": 0}
+
+    user_rows = []
+    no_uploads_left = 0
+    for user in users:
+        used = upload_usage_for_user(user.id)
+        limit = int(user.upload_limit or DEFAULT_UPLOAD_LIMIT)
+        remaining = max(0, limit - used)
+        if remaining == 0 and not user.is_deleted:
+            no_uploads_left += 1
+        user_rows.append(
+            {
+                **public_user(user),
+                "uploadsUsed": used,
+                "uploadsRemaining": remaining,
+                "usagePercent": min(100, round((used / limit) * 100)) if limit > 0 else 100,
+            }
+        )
+
+    uploads_today = sum(1 for item in success_histories if item.created_at and item.created_at.date() == today)
+    uploads_month = sum(
+        1
+        for item in success_histories
+        if item.created_at and item.created_at.year == now.year and item.created_at.month == now.month
+    )
+
+    return {
+        "kpis": {
+            "totalUsers": len(users),
+            "activeUsers": sum(1 for user in users if user.is_active and not user.is_deleted),
+            "disabledDeletedUsers": sum(1 for user in users if user.is_deleted or not user.is_active),
+            "totalUploadsProcessed": len(success_histories),
+            "uploadsToday": uploads_today,
+            "uploadsThisMonth": uploads_month,
+            "mostUsedShippingLine": most_used_line,
+            "usersWithNoUploadsLeft": no_uploads_left,
+        },
+        "shippingLines": shipping_lines,
+        "users": user_rows,
+    }
 
 
 def ensure_admin_user() -> None:
@@ -470,6 +564,13 @@ def register_routes(app: Flask) -> None:
         users = AuthorizedUser.query.order_by(AuthorizedUser.created_at.desc(), AuthorizedUser.email.asc()).all()
         return jsonify({"users": [public_user(u) for u in users]})
 
+    @app.get("/api/admin/analytics")
+    def admin_analytics():
+        _, error = admin_required()
+        if error:
+            return error
+        return jsonify(build_admin_analytics())
+
     @app.post("/api/admin/users")
     def create_user():
         _, error = admin_required()
@@ -618,11 +719,19 @@ def register_routes(app: Flask) -> None:
                 tmp.close()
                 temp_paths.append(Path(tmp.name))
 
-            rows = export_booking_data(temp_paths)
-            for row, source in zip(rows, files):
-                if (source.filename or "").lower() == "latt trading.pdf":
-                    row["Line"] = "LATT"
-            return jsonify({"rows": rows})
+            try:
+                rows = export_booking_data(temp_paths)
+                for row, source in zip(rows, files):
+                    if (source.filename or "").lower() == "latt trading.pdf":
+                        row["Line"] = "LATT"
+                record_upload_history(user, files, rows, "success")
+                db.session.commit()
+                return jsonify({"rows": rows})
+            except Exception:
+                db.session.rollback()
+                record_upload_history(user, files, status="failed")
+                db.session.commit()
+                raise
         finally:
             for path in temp_paths:
                 try:

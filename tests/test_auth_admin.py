@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from io import BytesIO
+from unittest.mock import patch
 
 
 class AuthAdminTests(unittest.TestCase):
@@ -16,6 +18,8 @@ class AuthAdminTests(unittest.TestCase):
         os.environ["COOKIE_SECURE"] = "false"
         import app
 
+        app.GLOBAL_RATE_LIMIT.clear()
+        app.LOGIN_RATE_LIMIT.clear()
         self.app_module = app
         self.app = app.create_app()
         self.client = self.app.test_client()
@@ -142,6 +146,53 @@ class AuthAdminTests(unittest.TestCase):
             json={"identifier": "admin", "password": "NewAdminPass!789"},
         )
         self.assertEqual(login.status_code, 200, login.get_data(as_text=True))
+
+    def test_admin_analytics_tracks_upload_usage_and_shipping_lines(self):
+        self.admin_login()
+        create = self.client.post(
+            "/api/admin/users",
+            json={
+                "name": "Analytics User",
+                "email": "analytics@example.com",
+                "username": "analytics",
+                "role": "user",
+                "uploadLimit": 3,
+            },
+        )
+        self.assertEqual(create.status_code, 201, create.get_data(as_text=True))
+        password = create.get_json()["generatedPassword"]
+
+        self.client.post("/api/auth/logout")
+        login = self.client.post("/api/auth/login", json={"identifier": "analytics", "password": password})
+        self.assertEqual(login.status_code, 200, login.get_data(as_text=True))
+
+        rows = [
+            {"Line": "MAERSK", "Booking No.": "A"},
+            {"Line": "MSC", "Booking No.": "B"},
+        ]
+        with patch.object(self.app_module, "export_booking_data", return_value=rows):
+            upload = self.client.post(
+                "/api/extract",
+                data={
+                    "files": [
+                        (BytesIO(b"%PDF-1.4"), "one.pdf"),
+                        (BytesIO(b"%PDF-1.4"), "two.pdf"),
+                    ]
+                },
+                content_type="multipart/form-data",
+            )
+        self.assertEqual(upload.status_code, 200, upload.get_data(as_text=True))
+
+        self.client.post("/api/auth/logout")
+        self.admin_login()
+        analytics = self.client.get("/api/admin/analytics")
+        self.assertEqual(analytics.status_code, 200, analytics.get_data(as_text=True))
+        data = analytics.get_json()
+        self.assertEqual(data["kpis"]["totalUploadsProcessed"], 2)
+        self.assertEqual(data["kpis"]["mostUsedShippingLine"]["line"], "MAERSK")
+        user_row = next(item for item in data["users"] if item["username"] == "analytics")
+        self.assertEqual(user_row["uploadsUsed"], 2)
+        self.assertEqual(user_row["uploadsRemaining"], 1)
 
 
 if __name__ == "__main__":
