@@ -47,9 +47,24 @@
     <header class="topbar">
       <nav id="publicNav" class="public-nav public-nav-left">
         <button id="menuNavBtn" class="menu-btn" type="button"><span></span>Menu</button>
-        <button id="bookingNavBtn" class="ghost-btn nav-corner" type="button">Booking Extraction</button>
-        <button id="ratesNavBtn" class="ghost-btn nav-corner" type="button">Rates Comparison</button>
-        <button id="docsNavBtn" class="ghost-btn nav-corner" type="button">Documentation Accuracy</button>
+        <button id="homeNavBtn" class="ghost-btn nav-corner" type="button">Home</button>
+        <div class="tools-dropdown">
+          <button id="toolsDropdownBtn" class="ghost-btn nav-corner" type="button" aria-haspopup="true" aria-expanded="false">Tools</button>
+          <div id="toolsDropdown" class="tools-dropdown-menu hidden" role="menu">
+            <button id="bookingNavBtn" type="button" role="menuitem">
+              <span>Booking Extraction Tool</span>
+              <small>Available Now</small>
+            </button>
+            <button id="ratesNavBtn" type="button" role="menuitem">
+              <span>Rates Comparison</span>
+              <small>Coming Soon</small>
+            </button>
+            <button id="docsNavBtn" type="button" role="menuitem">
+              <span>Documentation Accuracy Checker</span>
+              <small>Coming Soon</small>
+            </button>
+          </div>
+        </div>
       </nav>
       <div class="brand-wrap">
         <div class="brand">MOVANTA</div>
@@ -108,7 +123,6 @@ Shipping.</h1>
             <p id="homeIntro">Movanta transforms booking PDFs into clear maritime intelligence for teams moving cargo across complex global routes.</p>
             <div class="hero-actions">
               <button id="heroToolBtn" class="primary-btn angled-btn" type="button">Start Booking Extraction</button>
-              <button id="heroLoginBtn" class="ghost-btn angled-btn" type="button">Login / Signup</button>
             </div>
           </div>
           <div class="hero-stat-panel">

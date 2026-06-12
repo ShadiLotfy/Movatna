@@ -168,6 +168,8 @@ function uploadExtraction(formData) {
 }
 
 function show(view) {
+  document.body.classList.remove("view-home", "view-login", "view-dashboard");
+  document.body.classList.add(view === "dashboardView" ? "view-dashboard" : view === "loginView" ? "view-login" : "view-home");
   if (view === "loginView") {
     $("homeView").classList.remove("hidden");
     $("dashboardView").classList.add("hidden");
@@ -177,9 +179,10 @@ function show(view) {
     $(view).classList.remove("hidden");
   }
   const isLoggedIn = Boolean(currentUser);
-  $("publicNav").classList.toggle("hidden", isLoggedIn);
+  $("publicNav").classList.remove("hidden");
   $("publicNavRight").classList.toggle("hidden", isLoggedIn);
   $("userBar").classList.toggle("hidden", !isLoggedIn);
+  document.body.classList.toggle("is-authenticated", isLoggedIn);
   if (view === "homeView" || view === "loginView") initHeroReveal();
 }
 
@@ -196,6 +199,17 @@ function openLuxuryMenu() {
 function closeLuxuryMenu() {
   $("luxuryMenu").classList.add("hidden");
   $("luxuryMenu").setAttribute("aria-hidden", "true");
+}
+
+function closeToolsDropdown() {
+  $("toolsDropdown").classList.add("hidden");
+  $("toolsDropdownBtn").setAttribute("aria-expanded", "false");
+}
+
+function toggleToolsDropdown() {
+  const willOpen = $("toolsDropdown").classList.contains("hidden");
+  $("toolsDropdown").classList.toggle("hidden", !willOpen);
+  $("toolsDropdownBtn").setAttribute("aria-expanded", String(willOpen));
 }
 
 function initHeroReveal() {
@@ -590,15 +604,32 @@ $("logoutBtn").addEventListener("click", async () => {
 });
 
 $("menuNavBtn").addEventListener("click", openLuxuryMenu);
-$("bookingNavBtn").addEventListener("click", openBookingTool);
-$("ratesNavBtn").addEventListener("click", () => showComingSoon("Rates Comparison"));
-$("docsNavBtn").addEventListener("click", () => showComingSoon("Documentation Accuracy Checker"));
+$("homeNavBtn").addEventListener("click", () => {
+  closeToolsDropdown();
+  show("homeView");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+$("toolsDropdownBtn").addEventListener("click", (event) => {
+  event.stopPropagation();
+  toggleToolsDropdown();
+});
+$("bookingNavBtn").addEventListener("click", () => {
+  closeToolsDropdown();
+  openBookingTool();
+});
+$("ratesNavBtn").addEventListener("click", () => {
+  closeToolsDropdown();
+  showComingSoon("Rates Comparison");
+});
+$("docsNavBtn").addEventListener("click", () => {
+  closeToolsDropdown();
+  showComingSoon("Documentation Accuracy Checker");
+});
 $("contactNavBtn").addEventListener("click", () => {
   window.location.href = "mailto:movantaa@outlook.com";
 });
 $("searchNavBtn").addEventListener("click", () => showComingSoon("Search"));
 $("loginNavBtn").addEventListener("click", () => show("loginView"));
-$("heroLoginBtn").addEventListener("click", () => show("loginView"));
 $("heroToolBtn").addEventListener("click", openBookingTool);
 $("registerLinkBtn").addEventListener("click", () => {
   window.location.href = "mailto:movantaa@outlook.com?subject=Movanta%20Access%20Request";
@@ -623,6 +654,12 @@ $("closeLoginBtn").addEventListener("click", closeLoginModal);
 $("closeMenuBtn").addEventListener("click", closeLuxuryMenu);
 $("luxuryMenu").addEventListener("click", (event) => {
   if (event.target === $("luxuryMenu")) closeLuxuryMenu();
+});
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".tools-dropdown")) closeToolsDropdown();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeToolsDropdown();
 });
 
 document.querySelectorAll("[data-menu-action]").forEach((button) => {
