@@ -165,11 +165,32 @@ function uploadExtraction(formData) {
 }
 
 function show(view) {
-  ["homeView", "loginView", "dashboardView"].forEach((id) => $(id).classList.add("hidden"));
-  $(view).classList.remove("hidden");
+  if (view === "loginView") {
+    $("homeView").classList.remove("hidden");
+    $("dashboardView").classList.add("hidden");
+    $("loginView").classList.remove("hidden");
+  } else {
+    ["homeView", "loginView", "dashboardView"].forEach((id) => $(id).classList.add("hidden"));
+    $(view).classList.remove("hidden");
+  }
   const isLoggedIn = Boolean(currentUser);
   $("publicNav").classList.toggle("hidden", isLoggedIn);
   $("userBar").classList.toggle("hidden", !isLoggedIn);
+}
+
+function closeLoginModal() {
+  $("loginView").classList.add("hidden");
+  if (!currentUser && $("dashboardView").classList.contains("hidden")) $("homeView").classList.remove("hidden");
+}
+
+function openLuxuryMenu() {
+  $("luxuryMenu").classList.remove("hidden");
+  $("luxuryMenu").setAttribute("aria-hidden", "false");
+}
+
+function closeLuxuryMenu() {
+  $("luxuryMenu").classList.add("hidden");
+  $("luxuryMenu").setAttribute("aria-hidden", "true");
 }
 
 function openModal(id) {
@@ -267,6 +288,7 @@ function setUser(user) {
   currentUser = user;
   $("userIdentity").textContent = `${user.name || user.username} / ${user.role.toUpperCase()}`;
   $("adminTab").classList.toggle("hidden", !user.isAdmin);
+  $("userAdminBtn").classList.toggle("hidden", !user.isAdmin);
   $("uploadLimitNote").textContent = user.isAdmin
     ? "Admin access: batch upload limit is unrestricted."
     : `Upload limit: ${user.uploadLimit} PDFs per extraction.`;
@@ -278,6 +300,8 @@ function signOutUser() {
   stopAnalyticsPolling();
   rows = [];
   $("pdfInput").value = "";
+  $("adminTab").classList.add("hidden");
+  $("userAdminBtn").classList.add("hidden");
   updateFileCount();
   renderTable();
   updateUploadLimitCard();
@@ -566,11 +590,64 @@ $("logoutBtn").addEventListener("click", async () => {
   }
 });
 
-$("toolsNavBtn").addEventListener("click", () => $("toolsSection").scrollIntoView({ behavior: "smooth" }));
+$("homeNavBtn").addEventListener("click", () => {
+  closeLoginModal();
+  show("homeView");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+$("menuNavBtn").addEventListener("click", openLuxuryMenu);
 $("loginNavBtn").addEventListener("click", () => show("loginView"));
 $("heroLoginBtn").addEventListener("click", () => show("loginView"));
 $("heroToolBtn").addEventListener("click", openBookingTool);
-$("toolHomeBtn").addEventListener("click", openBookingTool);
+$("userHomeBtn").addEventListener("click", () => {
+  show("homeView");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
+$("userDashboardBtn").addEventListener("click", () => {
+  show("dashboardView");
+  setTab("dashboard");
+});
+$("userAdminBtn").addEventListener("click", async () => {
+  show("dashboardView");
+  setTab("admin");
+  await loadUsers();
+});
+$("closeLoginBtn").addEventListener("click", closeLoginModal);
+$("closeMenuBtn").addEventListener("click", closeLuxuryMenu);
+$("luxuryMenu").addEventListener("click", (event) => {
+  if (event.target === $("luxuryMenu")) closeLuxuryMenu();
+});
+
+document.querySelectorAll("[data-menu-action]").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const action = button.dataset.menuAction;
+    closeLuxuryMenu();
+    if (action === "home") {
+      show("homeView");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+    if (action === "tools") {
+      show("homeView");
+      $("toolsSection").scrollIntoView({ behavior: "smooth" });
+    }
+    if (action === "dashboard") openBookingTool();
+    if (action === "admin") {
+      if (!currentUser?.isAdmin) {
+        show("loginView");
+        toast("Admin access requires login.");
+        return;
+      }
+      show("dashboardView");
+      setTab("admin");
+      await loadUsers();
+    }
+    if (action === "contact") window.location.href = "mailto:movantaa@outlook.com";
+    if (action === "login") {
+      if (currentUser) $("logoutBtn").click();
+      else show("loginView");
+    }
+  });
+});
 
 document.querySelectorAll("[data-tool]").forEach((button) => {
   button.addEventListener("click", () => {
