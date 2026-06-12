@@ -26,8 +26,6 @@ let selectedFiles = [];
 let loaderProgress = 0;
 let loaderTimer = null;
 let loaderHideTimer = null;
-const revealTimers = new WeakMap();
-const revealChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
 const homeSections = {
   future: {
@@ -236,40 +234,8 @@ function closeModal(id) {
 }
 
 function enhanceRollingText() {
-  // The reference direction now uses underline hover only; keep this as a no-op for existing calls.
+  // The final theme uses underline hover only; retained as a no-op for legacy calls.
   return;
-}
-
-function randomizeText(finalText, progress) {
-  return Array.from(finalText)
-    .map((char, index) => {
-      if (char === " ") return " ";
-      if (index < progress) return char;
-      return revealChars[Math.floor(Math.random() * revealChars.length)];
-    })
-    .join("");
-}
-
-function runLetterReveal(element) {
-  const finalText = element.dataset.revealText || element.getAttribute("aria-label") || "";
-  if (!finalText) return;
-  window.clearInterval(revealTimers.get(element));
-  const target = element.querySelector(".reveal-text");
-  if (!target) return;
-
-  let tick = 0;
-  const maxTicks = Math.max(8, finalText.length + 4);
-  const timer = window.setInterval(() => {
-    tick += 1;
-    const progress = Math.max(0, tick - 3);
-    const value = tick >= maxTicks ? finalText : randomizeText(finalText, progress);
-    target.textContent = value;
-    if (tick >= maxTicks) {
-      window.clearInterval(timer);
-      target.textContent = finalText;
-    }
-  }, 28);
-  revealTimers.set(element, timer);
 }
 
 function setHomeSection(sectionKey) {
@@ -279,12 +245,6 @@ function setHomeSection(sectionKey) {
   $("homeIntro").textContent = section.intro;
   document.querySelectorAll("[data-home-section]").forEach((button) => {
     button.classList.toggle("active", button.dataset.homeSection === sectionKey);
-  });
-  document.querySelectorAll("#homeSectionKicker, #homeHeadline, #homeIntro").forEach((el) => {
-    delete el.dataset.rollEnhanced;
-    el.classList.remove("text-swap");
-    void el.offsetWidth;
-    el.classList.add("text-swap");
   });
   enhanceRollingText();
 }
