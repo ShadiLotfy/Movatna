@@ -167,9 +167,13 @@
               <h2>Process booking PDFs</h2>
             </div>
             <form id="uploadForm" class="upload-form">
-              <label>
+              <label class="file-picker">
                 <span>Booking PDFs</span>
-                <input id="pdfInput" type="file" accept=".pdf,application/pdf" multiple />
+                <input id="pdfInput" class="file-input" type="file" accept=".pdf,application/pdf" multiple />
+                <span class="file-control" aria-hidden="true">
+                  <strong>Choose Files</strong>
+                  <small id="fileCountLabel">No files selected</small>
+                </span>
               </label>
               <button id="extractSubmitBtn" class="primary-btn" type="submit">Extract PDFs</button>
             </form>

@@ -99,6 +99,14 @@ function showLoader(show, label = "Loading content") {
   loaderHideTimer = window.setTimeout(() => loader.classList.add("hidden"), 520);
 }
 
+function withTimeout(promise, ms = 8000, message = "Request timed out") {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timeoutId));
+}
+
 function toast(message, isError = false) {
   const el = $("toast");
   el.textContent = message;
@@ -266,6 +274,7 @@ function signOutUser() {
   currentUser = null;
   rows = [];
   $("pdfInput").value = "";
+  updateFileCount();
   renderTable();
   updateUploadLimitCard();
 }
@@ -344,6 +353,14 @@ function updateUploadLimitCard() {
     ? `${selected} PDF${selected === 1 ? "" : "s"} selected for extraction.`
     : "Choose PDFs to see remaining upload slots.";
   if (submit) submit.disabled = false;
+}
+
+function updateFileCount() {
+  const input = $("pdfInput");
+  const label = $("fileCountLabel");
+  if (!input || !label) return;
+  const count = Array.from(input.files || []).length;
+  label.textContent = count ? `${count} file${count === 1 ? "" : "s"} selected` : "No files selected";
 }
 
 function renderTable() {
@@ -534,13 +551,14 @@ $("loginForm").addEventListener("submit", async (event) => {
 $("logoutBtn").addEventListener("click", async () => {
   showLoader(true, "Signing out");
   try {
-    await api("/api/auth/logout", { method: "POST" });
+    await withTimeout(api("/api/auth/logout", { method: "POST" }), 6000, "Sign out timed out");
     signOutUser();
     show("homeView");
     toast("Signed out");
   } catch (error) {
-    showLoader(false);
     toast(error.message, true);
+  } finally {
+    showLoader(false);
   }
 });
 
@@ -611,7 +629,10 @@ $("uploadForm").addEventListener("submit", async (event) => {
   }
 });
 
-$("pdfInput").addEventListener("change", updateUploadLimitCard);
+$("pdfInput").addEventListener("change", () => {
+  updateFileCount();
+  updateUploadLimitCard();
+});
 
 $("downloadCsvBtn").addEventListener("click", () => {
   if (!rows.length) return;
@@ -841,4 +862,5 @@ document.querySelectorAll(".modal-overlay").forEach((modal) => {
 
 enhanceRollingText();
 setHomeSection("future");
+updateFileCount();
 bootstrap();

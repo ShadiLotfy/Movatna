@@ -591,6 +591,58 @@ label span {
   letter-spacing: 0.1em;
 }
 
+.file-picker {
+  cursor: pointer;
+}
+
+.file-input {
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+}
+
+.file-control {
+  align-items: center;
+  background:
+    linear-gradient(180deg, rgba(216, 243, 255, 0.055), rgba(216, 243, 255, 0.015)),
+    rgba(1, 7, 11, 0.72);
+  border: 1px solid var(--line-strong);
+  clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
+  color: var(--ink);
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  min-height: 54px;
+  padding: 14px 16px;
+  transition: background 0.22s, border-color 0.22s, box-shadow 0.22s;
+}
+
+.file-control strong {
+  color: var(--paper);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.file-control small {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.file-picker:hover .file-control,
+.file-picker:focus-within .file-control {
+  background: rgba(216, 243, 255, 0.075);
+  border-color: var(--paper);
+  box-shadow: 0 0 0 3px rgba(216, 243, 255, 0.07);
+}
+
 input,
 select {
   background: rgba(255, 255, 255, 0.025);
@@ -721,7 +773,10 @@ button:disabled {
 .dashboard {
   animation: riseIn 0.7s ease both;
   display: grid;
-  gap: clamp(26px, 3.5vw, 44px);
+  gap: clamp(22px, 3vw, 36px);
+  margin: 0 auto;
+  max-width: 1500px;
+  width: 100%;
 }
 
 .dashboard-head,
@@ -731,21 +786,22 @@ button:disabled {
 
 .dashboard-head {
   border-bottom: 1px solid var(--line);
-  padding-bottom: clamp(22px, 4vw, 46px);
+  padding-bottom: clamp(18px, 3vw, 34px);
 }
 
 .panel-grid,
 .admin-panel {
   display: grid;
-  gap: 24px;
+  gap: clamp(18px, 2.4vw, 28px);
+  width: 100%;
 }
 
 .command-panel {
-  align-items: end;
+  align-items: start;
   display: grid;
-  gap: 24px;
-  grid-template-columns: minmax(240px, 0.42fr) minmax(0, 1fr);
-  padding: clamp(22px, 3vw, 38px);
+  gap: clamp(18px, 2.4vw, 28px);
+  grid-template-columns: minmax(260px, 0.34fr) minmax(0, 1fr);
+  padding: clamp(20px, 2.8vw, 34px);
   position: relative;
 }
 
@@ -767,7 +823,7 @@ button:disabled {
   align-items: end;
   display: grid;
   gap: 18px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, auto);
 }
 
 .upload-limit-card {
@@ -858,7 +914,13 @@ button:disabled {
 }
 
 .table-scroll {
+  background:
+    linear-gradient(90deg, rgba(183, 231, 247, 0.08), transparent 34px),
+    linear-gradient(270deg, rgba(183, 231, 247, 0.08), transparent 34px),
+    rgba(1, 7, 11, 0.28);
   overflow-x: auto;
+  scrollbar-color: rgba(183, 231, 247, 0.44) rgba(216, 243, 255, 0.06);
+  scrollbar-width: thin;
 }
 
 .table-scroll::-webkit-scrollbar {
@@ -866,11 +928,11 @@ button:disabled {
 }
 
 .table-scroll::-webkit-scrollbar-thumb {
-  background: rgba(245, 241, 233, 0.32);
+  background: rgba(183, 231, 247, 0.44);
 }
 
 .table-scroll::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(216, 243, 255, 0.06);
 }
 
 table {
@@ -884,12 +946,13 @@ table {
 }
 
 th {
-  background: rgba(245, 241, 233, 0.045);
-  border-bottom: 1px solid var(--line);
-  color: var(--muted);
+  background: rgba(216, 243, 255, 0.08);
+  border-bottom: 1px solid rgba(216, 243, 255, 0.2);
+  color: #d8f3ff;
   font-size: 11px;
-  letter-spacing: 0.1em;
-  padding: 14px 16px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  padding: 16px 18px;
   text-align: left;
   white-space: nowrap;
 }
@@ -900,10 +963,11 @@ th {
 }
 
 td {
-  border-top: 1px solid var(--line);
-  color: var(--ink);
+  border-top: 1px solid rgba(216, 243, 255, 0.1);
+  color: rgba(234, 247, 255, 0.94);
   font-size: 14px;
-  padding: 15px 16px;
+  line-height: 1.35;
+  padding: 16px 18px;
   white-space: nowrap;
 }
 
@@ -921,11 +985,11 @@ tbody tr {
 }
 
 tbody tr:hover {
-  background: rgba(245, 241, 233, 0.045);
+  background: rgba(183, 231, 247, 0.055);
 }
 
 .booking-table .th-sub {
-  color: rgba(168, 160, 153, 0.64);
+  color: rgba(183, 231, 247, 0.62);
   display: block;
   font-size: 9px;
   margin-top: 3px;
@@ -1532,6 +1596,10 @@ tbody tr:hover {
     grid-template-columns: 1fr;
   }
 
+  .command-panel {
+    align-items: stretch;
+  }
+
   .section-rail {
     align-self: stretch;
     border-left: 0;
@@ -1589,6 +1657,15 @@ tbody tr:hover {
   .upload-form {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .file-control {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .file-control small {
+    text-align: left;
   }
 
   .tabs,
