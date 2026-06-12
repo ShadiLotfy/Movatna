@@ -625,7 +625,15 @@ $("uploadForm").addEventListener("submit", async (event) => {
     const data = await uploadExtraction(formData);
     rows = data.rows || [];
     renderTable();
-    toast(`Extracted ${rows.length} PDF${rows.length === 1 ? "" : "s"}`);
+    const summary = data.summary || { processed: rows.length, skipped: 0, failed: 0 };
+    const skipped = data.skipped || [];
+    if (skipped.length) {
+      const first = skipped[0];
+      const detail = first.bookingNo ? ` Booking ${first.bookingNo}` : "";
+      toast(`${summary.processed} processed, ${summary.skipped} skipped.${detail} has already been processed before.`, summary.processed === 0);
+    } else {
+      toast(`Extracted ${rows.length} PDF${rows.length === 1 ? "" : "s"}`);
+    }
   } catch (error) {
     toast(error.message, true);
   } finally {
@@ -777,7 +785,7 @@ function renderAnalytics() {
         .map(
           (item) => `
             <div class="line-row">
-              <div><strong>${escapeHtml(item.line)}</strong><span>${escapeHtml(item.count)} uploads</span></div>
+              <div><strong>${escapeHtml(item.line)}</strong><span>${escapeHtml(item.count)} bookings</span></div>
               <i style="transform:scaleX(${Math.max(0.04, (item.count || 0) / maxLineCount)})"></i>
             </div>`
         )
@@ -786,6 +794,18 @@ function renderAnalytics() {
 
   $("userUsageList").innerHTML = (analytics.users || [])
     .map((user) => {
+      if (user.isUnlimited || user.isAdmin) {
+        return `
+          <div class="usage-row unlimited">
+            <div class="usage-main">
+              <strong>${escapeHtml(user.name || user.username || "-")}</strong>
+              <span>${escapeHtml(user.email)} / ${escapeHtml(user.role)} / Admin</span>
+            </div>
+            <div class="usage-meta">
+              <span>Unlimited</span>
+            </div>
+          </div>`;
+      }
       const status = user.isDeleted ? "Deleted" : user.isActive ? "Active" : "Disabled";
       const remaining = Number(user.uploadsRemaining || 0);
       const cls = remaining === 0 ? "empty" : remaining <= 3 ? "low" : "";
@@ -817,8 +837,8 @@ function renderAnalytics() {
                 <span>${escapeHtml(item.userName || "-")} / ${escapeHtml(item.userEmail || "-")}</span>
               </div>
               <div>
-                <b>${escapeHtml(item.line || "Unknown")}</b>
-                <span>${escapeHtml(status || "-")} / ${escapeHtml(date)}</span>
+                <b>${escapeHtml(item.bookingNo || item.line || "Unknown")}</b>
+                <span>${escapeHtml(item.line || "Unknown")} / ${escapeHtml(status || "-")} / ${escapeHtml(date)}</span>
               </div>
             </div>`;
         })
@@ -840,7 +860,7 @@ function renderUsers() {
             <small>@${escapeHtml(user.username)}</small>
           </td>
           <td>${escapeHtml(user.role)}</td>
-          <td>${escapeHtml(user.uploadLimit)}</td>
+          <td>${escapeHtml(user.isAdmin ? "Unlimited" : user.uploadLimit)}</td>
           <td><span class="status-pill ${status.toLowerCase()}">${status}</span></td>
           <td>${created}</td>
           <td>

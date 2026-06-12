@@ -156,7 +156,7 @@ class AuthAdminTests(unittest.TestCase):
                 "email": "analytics@example.com",
                 "username": "analytics",
                 "role": "user",
-                "uploadLimit": 3,
+                "uploadLimit": 5,
             },
         )
         self.assertEqual(create.status_code, 201, create.get_data(as_text=True))
@@ -170,7 +170,8 @@ class AuthAdminTests(unittest.TestCase):
 
         rows = [
             {"Line": "MAERSK", "Booking No.": "A"},
-            {"Line": "MSC", "Booking No.": "B"},
+            {"Line": "MAERSK", "Booking No.": "B"},
+            {"Line": "MSC", "Booking No.": "C"},
         ]
         with patch.object(self.app_module, "export_booking_data", return_value=rows):
             upload = self.client.post(
@@ -179,24 +180,48 @@ class AuthAdminTests(unittest.TestCase):
                     "files": [
                         (BytesIO(b"%PDF-1.4"), "one.pdf"),
                         (BytesIO(b"%PDF-1.4"), "two.pdf"),
+                        (BytesIO(b"%PDF-1.4"), "three.pdf"),
                     ]
                 },
                 content_type="multipart/form-data",
             )
         self.assertEqual(upload.status_code, 200, upload.get_data(as_text=True))
+        upload_data = upload.get_json()
+        self.assertEqual(upload_data["summary"], {"processed": 3, "skipped": 0, "failed": 0})
+
+        duplicate_rows = [{"Line": "MAERSK", "Booking No.": " a "}]
+        with patch.object(self.app_module, "export_booking_data", return_value=duplicate_rows):
+            duplicate = self.client.post(
+                "/api/extract",
+                data={"files": [(BytesIO(b"%PDF-1.4"), "duplicate.pdf")]},
+                content_type="multipart/form-data",
+            )
+        self.assertEqual(duplicate.status_code, 200, duplicate.get_data(as_text=True))
+        duplicate_data = duplicate.get_json()
+        self.assertEqual(duplicate_data["rows"], [])
+        self.assertEqual(duplicate_data["summary"], {"processed": 0, "skipped": 1, "failed": 0})
+        self.assertEqual(duplicate_data["skipped"][0]["bookingNo"], "a")
+        self.assertEqual(duplicate_data["skipped"][0]["line"], "MAERSK")
 
         self.client.post("/api/auth/logout")
         self.admin_login()
         analytics = self.client.get("/api/admin/analytics")
         self.assertEqual(analytics.status_code, 200, analytics.get_data(as_text=True))
         data = analytics.get_json()
-        self.assertEqual(data["kpis"]["totalUploadsProcessed"], 2)
+        self.assertEqual(data["kpis"]["totalUploadsProcessed"], 3)
         self.assertEqual(data["kpis"]["mostUsedShippingLine"]["line"], "MAERSK")
-        self.assertEqual({item["fileName"] for item in data["recentUploads"]}, {"one.pdf", "two.pdf"})
+        self.assertEqual(data["kpis"]["mostUsedShippingLine"]["count"], 2)
+        self.assertEqual({item["fileName"] for item in data["recentUploads"]}, {"one.pdf", "two.pdf", "three.pdf", "duplicate.pdf"})
         self.assertEqual({item["line"] for item in data["recentUploads"]}, {"MAERSK", "MSC"})
+        self.assertIn("duplicate", {item["status"] for item in data["recentUploads"]})
         user_row = next(item for item in data["users"] if item["username"] == "analytics")
-        self.assertEqual(user_row["uploadsUsed"], 2)
-        self.assertEqual(user_row["uploadsRemaining"], 1)
+        self.assertEqual(user_row["uploadsUsed"], 3)
+        self.assertEqual(user_row["uploadsRemaining"], 2)
+        admin_row = next(item for item in data["users"] if item["username"] == "admin")
+        self.assertTrue(admin_row["isUnlimited"])
+        self.assertEqual(admin_row["uploadLimitLabel"], "Unlimited")
+        self.assertIsNone(admin_row["uploadsUsed"])
+        self.assertIsNone(admin_row["uploadsRemaining"])
 
         disable = self.client.patch(f"/api/admin/users/{user_id}", json={"isActive": False})
         self.assertEqual(disable.status_code, 200, disable.get_data(as_text=True))

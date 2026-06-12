@@ -978,6 +978,10 @@ button:disabled {
   border-left-color: rgba(255, 106, 95, 0.72);
 }
 
+.recent-row.duplicate {
+  border-left-color: rgba(234, 214, 165, 0.72);
+}
+
 .recent-row b {
   color: var(--gold-soft);
   font-size: 12px;
@@ -1018,6 +1022,10 @@ button:disabled {
 
 .usage-row.empty {
   border-color: rgba(255, 106, 95, 0.68);
+}
+
+.usage-row.unlimited {
+  border-color: rgba(234, 214, 165, 0.45);
 }
 
 .usage-main span {

@@ -62,6 +62,8 @@ class UploadHistory(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("authorized_users.id"), nullable=False, index=True)
     file_name = db.Column(db.String(255), nullable=False, default="")
     extracted_line = db.Column(db.String(120), nullable=False, default="")
+    booking_number = db.Column(db.String(120), nullable=False, default="")
+    booking_number_normalized = db.Column(db.String(120), nullable=False, default="", index=True)
     status = db.Column(db.String(16), nullable=False, default="success", index=True)
     created_at = db.Column(db.DateTime(timezone=True), default=lambda: utcnow(), nullable=False, index=True)
 
@@ -171,6 +173,7 @@ def create_app() -> Flask:
     with app.app_context():
         db.create_all()
         ensure_user_schema()
+        ensure_upload_history_schema()
         ensure_admin_user()
 
     register_security_hooks(app)
@@ -240,6 +243,21 @@ def ensure_user_schema() -> None:
     db.session.commit()
 
 
+def ensure_upload_history_schema() -> None:
+    inspector = inspect(db.engine)
+    if "upload_history" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("upload_history")}
+
+    def add_column(name: str, definition: str) -> None:
+        if name not in columns:
+            db.session.execute(text(f"ALTER TABLE upload_history ADD COLUMN {name} {definition}"))
+
+    add_column("booking_number", "VARCHAR(120) DEFAULT ''")
+    add_column("booking_number_normalized", "VARCHAR(120) DEFAULT ''")
+    db.session.commit()
+
+
 def unique_username_from_email(email: str) -> str:
     base = re.sub(r"[^a-zA-Z0-9._-]+", "", (email or "user").split("@", 1)[0]).lower() or "user"
     base = base[:48]
@@ -255,18 +273,103 @@ def username_owner(username: str) -> AuthorizedUser | None:
     return AuthorizedUser.query.filter(func.lower(AuthorizedUser.username) == username).first()
 
 
+INVALID_BOOKING_NUMBERS = {"", "N/A", "NA", "N.A.", "NULL", "NONE", "NIL", "-", "--", "TBA", "TBD"}
+
+
+def normalize_booking_number(value) -> str:
+    text_value = re.sub(r"\s+", " ", str(value or "").strip()).upper()
+    if text_value in INVALID_BOOKING_NUMBERS:
+        return ""
+    if not re.search(r"[A-Z0-9]", text_value):
+        return ""
+    return text_value
+
+
+def duplicate_booking_detail(history: UploadHistory) -> dict:
+    return {
+        "bookingNo": history.booking_number or history.booking_number_normalized,
+        "line": history.extracted_line or "Unknown",
+        "previousProcessedAt": history.created_at.isoformat() if history.created_at else None,
+        "status": history.status,
+    }
+
+
+def processed_booking_history(normalized_booking: str) -> UploadHistory | None:
+    if not normalized_booking:
+        return None
+    return (
+        UploadHistory.query.filter(
+            UploadHistory.booking_number_normalized == normalized_booking,
+            UploadHistory.status == "success",
+        )
+        .order_by(UploadHistory.created_at.asc())
+        .first()
+    )
+
+
+def partition_duplicate_bookings(files, rows: list[dict]) -> tuple[list, list[dict], list, list[dict], list[dict]]:
+    new_files = []
+    new_rows = []
+    duplicate_files = []
+    duplicate_rows = []
+    skipped = []
+    current_batch: dict[str, dict] = {}
+
+    for index, row in enumerate(rows):
+        file = files[index] if index < len(files) else None
+        booking_number = str(row.get("Booking No.") or "").strip()
+        normalized_booking = normalize_booking_number(booking_number)
+        existing = processed_booking_history(normalized_booking)
+        existing_detail = duplicate_booking_detail(existing) if existing else current_batch.get(normalized_booking)
+
+        if normalized_booking and existing_detail:
+            if file:
+                duplicate_files.append(file)
+            duplicate_rows.append(row)
+            skipped.append(
+                {
+                    "fileName": secure_filename(file.filename or "") if file else "",
+                    "bookingNo": booking_number or existing_detail.get("bookingNo", ""),
+                    "line": existing_detail.get("line") or row.get("Line") or "Unknown",
+                    "previousProcessedAt": existing_detail.get("previousProcessedAt"),
+                    "status": existing_detail.get("status") or "success",
+                    "message": "This booking has already been processed before.",
+                }
+            )
+            continue
+
+        if file:
+            new_files.append(file)
+        new_rows.append(row)
+        if normalized_booking:
+            current_batch[normalized_booking] = {
+                "bookingNo": booking_number,
+                "line": row.get("Line") or "Unknown",
+                "previousProcessedAt": None,
+                "status": "success",
+            }
+
+    return new_files, new_rows, duplicate_files, duplicate_rows, skipped
+
+
 def record_upload_history(user: AuthorizedUser, files, rows: list[dict] | None = None, status: str = "success") -> None:
     rows = rows or []
     for index, file in enumerate(files):
         filename = secure_filename(file.filename or "")[:255]
         line = ""
+        booking_number = ""
+        booking_number_normalized = ""
         if index < len(rows):
             line = str(rows[index].get("Line") or "")[:120]
+            booking_number = str(rows[index].get("Booking No.") or "")[:120]
+            booking_number_normalized = normalize_booking_number(booking_number)[:120]
         db.session.add(
             UploadHistory(
                 user_id=user.id,
                 file_name=filename,
                 extracted_line=line,
+                booking_number=booking_number,
+                booking_number_normalized=booking_number_normalized,
                 status=status,
             )
         )
@@ -289,13 +392,16 @@ def build_admin_analytics() -> dict:
     today = now.date()
 
     success_histories = [item for item in histories if item.status == "success"]
-    line_counts: dict[str, int] = {}
+    line_bookings: dict[str, set[str]] = {}
     for item in success_histories:
+        booking_number = normalize_booking_number(item.booking_number_normalized or item.booking_number)
+        if not booking_number:
+            continue
         line = (item.extracted_line or "Unknown").strip() or "Unknown"
-        line_counts[line] = line_counts.get(line, 0) + 1
+        line_bookings.setdefault(line, set()).add(booking_number)
     shipping_lines = [
-        {"line": line, "count": count}
-        for line, count in sorted(line_counts.items(), key=lambda item: (-item[1], item[0].lower()))
+        {"line": line, "count": len(bookings)}
+        for line, bookings in sorted(line_bookings.items(), key=lambda item: (-len(item[1]), item[0].lower()))
     ]
     most_used_line = shipping_lines[0] if shipping_lines else {"line": "No data", "count": 0}
 
@@ -305,16 +411,21 @@ def build_admin_analytics() -> dict:
         used = upload_usage_for_user(user.id)
         limit = int(user.upload_limit or DEFAULT_UPLOAD_LIMIT)
         remaining = max(0, limit - used)
-        if remaining == 0 and not user.is_deleted:
+        if remaining == 0 and not user.is_deleted and not user.is_admin:
             no_uploads_left += 1
-        user_rows.append(
-            {
-                **public_user(user),
-                "uploadsUsed": used,
-                "uploadsRemaining": remaining,
-                "usagePercent": min(100, round((used / limit) * 100)) if limit > 0 else 100,
-            }
-        )
+        row = {**public_user(user), "isUnlimited": bool(user.is_admin)}
+        if user.is_admin:
+            row.update({"uploadsUsed": None, "uploadsRemaining": None, "usagePercent": None, "uploadLimitLabel": "Unlimited"})
+        else:
+            row.update(
+                {
+                    "uploadsUsed": used,
+                    "uploadsRemaining": remaining,
+                    "usagePercent": min(100, round((used / limit) * 100)) if limit > 0 else 100,
+                    "uploadLimitLabel": str(limit),
+                }
+            )
+        user_rows.append(row)
 
     uploads_today = sum(1 for item in success_histories if item.created_at and item.created_at.date() == today)
     uploads_month = sum(
@@ -344,6 +455,7 @@ def build_admin_analytics() -> dict:
                 "userEmail": users_by_id[item.user_id].email if item.user_id in users_by_id else "",
                 "fileName": item.file_name,
                 "line": item.extracted_line or "Unknown",
+                "bookingNo": item.booking_number or item.booking_number_normalized,
                 "status": item.status,
                 "createdAt": item.created_at.isoformat() if item.created_at else None,
             }
@@ -738,9 +850,23 @@ def register_routes(app: Flask) -> None:
                 for row, source in zip(rows, files):
                     if (source.filename or "").lower() == "latt trading.pdf":
                         row["Line"] = "LATT"
-                record_upload_history(user, files, rows, "success")
+                new_files, new_rows, duplicate_files, duplicate_rows, skipped = partition_duplicate_bookings(files, rows)
+                if new_files:
+                    record_upload_history(user, new_files, new_rows, "success")
+                if duplicate_files:
+                    record_upload_history(user, duplicate_files, duplicate_rows, "duplicate")
                 db.session.commit()
-                return jsonify({"rows": rows})
+                return jsonify(
+                    {
+                        "rows": new_rows,
+                        "summary": {
+                            "processed": len(new_rows),
+                            "skipped": len(skipped),
+                            "failed": 0,
+                        },
+                        "skipped": skipped,
+                    }
+                )
             except Exception:
                 db.session.rollback()
                 record_upload_history(user, files, status="failed")
