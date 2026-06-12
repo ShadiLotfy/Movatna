@@ -188,7 +188,11 @@ function show(view) {
 
 function closeLoginModal() {
   $("loginView").classList.add("hidden");
-  if (!currentUser && $("dashboardView").classList.contains("hidden")) $("homeView").classList.remove("hidden");
+  if (!currentUser && $("dashboardView").classList.contains("hidden")) {
+    $("homeView").classList.remove("hidden");
+    document.body.classList.remove("view-login", "view-dashboard");
+    document.body.classList.add("view-home");
+  }
 }
 
 function openLuxuryMenu() {
@@ -641,6 +645,10 @@ $("userHomeBtn").addEventListener("click", () => {
   show("homeView");
   window.scrollTo({ top: 0, behavior: "smooth" });
 });
+$("userContactBtn").addEventListener("click", () => {
+  window.location.href = "mailto:movantaa@outlook.com";
+});
+$("userSearchBtn").addEventListener("click", () => showComingSoon("Search"));
 $("userDashboardBtn").addEventListener("click", () => {
   show("dashboardView");
   setTab("dashboard");
