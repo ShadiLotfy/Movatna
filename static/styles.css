@@ -208,7 +208,7 @@ label span,
 
 .brand::after {
   background: var(--blue);
-  bottom: -8px;
+  bottom: -3px;
   content: "";
   height: 1px;
   left: 0;
@@ -265,15 +265,35 @@ label span,
   animation: riseIn 0.7s ease both;
   display: grid;
   gap: clamp(48px, 7vw, 112px);
+  overflow: hidden;
+  position: relative;
+}
+
+.home-view::before {
+  animation: homeSeaDrift 16s linear infinite;
+  background:
+    radial-gradient(110px 26px at 55px 24px, transparent 46px, rgba(183, 231, 247, 0.1) 47px, transparent 50px),
+    radial-gradient(150px 34px at 75px 32px, transparent 64px, rgba(38, 117, 145, 0.16) 65px, transparent 68px);
+  background-size: 220px 72px, 300px 86px;
+  bottom: 6vh;
+  content: "";
+  height: 34vh;
+  left: -16vw;
+  opacity: 0.38;
+  pointer-events: none;
+  position: absolute;
+  right: -16vw;
+  transform: rotate(-1.4deg);
+  z-index: -1;
 }
 
 .home-hero {
-  align-items: end;
+  align-items: center;
   display: grid;
-  gap: clamp(28px, 6vw, 90px);
-  grid-template-columns: minmax(118px, 0.18fr) minmax(0, 1.05fr) minmax(300px, 0.42fr);
-  min-height: calc(100vh - 188px);
-  padding-top: clamp(30px, 7vw, 100px);
+  gap: clamp(24px, 4.5vw, 76px);
+  grid-template-columns: minmax(118px, 0.16fr) minmax(0, 0.98fr) minmax(300px, 0.38fr);
+  min-height: calc(100vh - 174px);
+  padding-top: clamp(16px, 4.5vw, 72px);
 }
 
 .section-rail {
@@ -329,16 +349,18 @@ label span,
 
 .hero-actions {
   flex-wrap: wrap;
-  margin-top: 34px;
+  margin-top: clamp(24px, 3vw, 38px);
 }
 
 .hero-stat-panel {
+  align-self: center;
   backdrop-filter: blur(16px);
   background: rgba(3, 8, 13, 0.34);
   border-left: 1px solid var(--line);
   display: grid;
   gap: 0;
-  margin-bottom: clamp(8px, 4vw, 54px);
+  margin-bottom: 0;
+  width: min(100%, 380px);
 }
 
 .stat-line {
@@ -475,8 +497,12 @@ label span,
 
 .hero-copy {
   align-self: center;
-  max-width: 980px;
+  max-width: 880px;
   animation: editorialIn 0.9s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.home-hero .hero-copy {
+  max-width: 840px;
 }
 
 .login-card,
@@ -655,9 +681,9 @@ select:focus {
   transform: translateX(120%);
 }
 
-.roll-text {
+.roll-text,
+.reveal-text {
   display: inline-block;
-  height: 1.08em;
   line-height: 1.08;
   overflow: hidden;
   vertical-align: -0.1em;
@@ -666,16 +692,15 @@ select:focus {
 .roll-text__inner {
   display: grid;
   gap: 0.1em;
-  transition: transform 0.64s cubic-bezier(0.19, 1, 0.22, 1);
 }
 
 .roll-text__inner span {
   min-width: max-content;
 }
 
-:is(.brand, .panel-kicker, .section-title, button):hover .roll-text__inner,
-:is(.brand, .panel-kicker, .section-title, button):focus-visible .roll-text__inner {
-  transform: translateY(calc(-1.18em));
+.reveal-text {
+  min-width: max-content;
+  text-shadow: 0 0 18px rgba(183, 231, 247, 0.08);
 }
 
 button:disabled {
@@ -1288,10 +1313,10 @@ tbody tr:hover {
 
 .ship-track {
   background:
-    radial-gradient(ellipse at 50% 82%, rgba(143, 179, 191, 0.2), transparent 52%),
-    linear-gradient(180deg, transparent 0 44%, rgba(20, 39, 45, 0.26) 45%, rgba(3, 10, 14, 0.84) 100%);
-  border-bottom: 1px solid rgba(245, 241, 233, 0.34);
-  height: 168px;
+    radial-gradient(ellipse at 50% 82%, rgba(183, 231, 247, 0.2), transparent 52%),
+    linear-gradient(180deg, transparent 0 42%, rgba(9, 25, 34, 0.34) 43%, rgba(1, 9, 14, 0.9) 100%);
+  border-bottom: 1px solid rgba(216, 243, 255, 0.34);
+  height: 188px;
   overflow: hidden;
   position: relative;
 }
@@ -1308,9 +1333,9 @@ tbody tr:hover {
 
 .sea {
   background:
-    radial-gradient(64px 18px at 32px 18px, transparent 27px, rgba(234, 214, 165, 0.28) 28px, transparent 30px),
-    radial-gradient(84px 22px at 42px 22px, transparent 36px, rgba(143, 179, 191, 0.18) 37px, transparent 39px);
-  background-size: 128px 42px, 168px 48px;
+    radial-gradient(74px 20px at 37px 19px, transparent 31px, rgba(216, 243, 255, 0.28) 32px, transparent 35px),
+    radial-gradient(104px 26px at 52px 25px, transparent 44px, rgba(38, 117, 145, 0.22) 45px, transparent 48px);
+  background-size: 148px 48px, 208px 58px;
   bottom: 20px;
   height: 42px;
   left: -80px;
@@ -1335,66 +1360,75 @@ tbody tr:hover {
 }
 
 .ship {
-  animation: shipFloat 2.6s ease-in-out infinite;
-  bottom: 54px;
-  height: 54px;
+  animation: shipFloat 3s ease-in-out infinite;
+  bottom: 62px;
+  height: 76px;
   left: 0;
   position: absolute;
   transform: translateX(0);
   transition: transform 0.48s cubic-bezier(0.2, 0.8, 0.2, 1);
-  width: 124px;
+  width: 188px;
   z-index: 2;
 }
 
 .ship::before {
-  border-bottom: 24px solid var(--paper);
-  border-left: 84px solid transparent;
-  border-right: 20px solid transparent;
-  bottom: 0;
+  background: linear-gradient(180deg, #d8f3ff, #8fb9c8);
+  bottom: 2px;
+  clip-path: polygon(0 0, 86% 0, 100% 38%, 88% 100%, 12% 100%);
   content: "";
-  left: 6px;
+  height: 30px;
+  left: 4px;
   position: absolute;
+  width: 174px;
 }
 
 .ship::after {
-  background: var(--paper);
-  bottom: 21px;
+  background:
+    linear-gradient(90deg, rgba(1, 9, 14, 0.38) 1px, transparent 1px),
+    linear-gradient(180deg, #d8f3ff, #9ac9d8);
+  background-size: 14px 100%, 100% 100%;
+  bottom: 32px;
+  clip-path: polygon(10px 0, 100% 0, 100% 100%, 0 100%, 0 10px);
   content: "";
-  height: 38px;
-  left: 60px;
+  height: 18px;
+  left: 28px;
   position: absolute;
-  transform: skewX(-12deg);
-  width: 4px;
+  width: 110px;
 }
 
 .ship i {
-  background: rgba(234, 214, 165, 0.34);
-  bottom: -7px;
+  background: linear-gradient(90deg, rgba(216, 243, 255, 0.38), transparent);
+  bottom: -5px;
   display: block;
   height: 2px;
-  left: 12px;
+  left: 0;
+  position: absolute;
+  width: 160px;
+}
+
+.ship span {
+  background:
+    linear-gradient(90deg, rgba(1, 9, 14, 0.3) 1px, transparent 1px),
+    linear-gradient(180deg, #b7e7f7 0 33%, #7fb2c2 33% 66%, #d8f3ff 66%);
+  background-size: 22px 100%, 100% 100%;
+  bottom: 50px;
+  clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px);
+  display: block;
+  height: 24px;
+  left: 36px;
   position: absolute;
   width: 92px;
 }
 
-.ship span {
-  border-bottom: 36px solid rgba(245, 241, 233, 0.94);
-  border-right: 36px solid transparent;
-  bottom: 25px;
-  display: block;
-  left: 64px;
-  position: absolute;
-}
-
 .ship b {
-  border-bottom: 26px solid rgba(201, 167, 106, 0.72);
-  border-left: 24px solid transparent;
-  bottom: 28px;
+  background: linear-gradient(180deg, #f4fbff, #9ac9d8);
+  bottom: 46px;
+  clip-path: polygon(9px 0, 100% 0, 100% 100%, 0 100%, 0 9px);
   display: block;
-  height: 0;
-  left: 34px;
+  height: 30px;
+  left: 132px;
   position: absolute;
-  width: 0;
+  width: 34px;
 }
 
 .loader-bar {
@@ -1427,6 +1461,15 @@ tbody tr:hover {
   }
   to {
     background-position: 288px 0, -184px 8px;
+  }
+}
+
+@keyframes homeSeaDrift {
+  from {
+    background-position: 0 0, 0 12px;
+  }
+  to {
+    background-position: 440px 0, -300px 12px;
   }
 }
 
@@ -1497,6 +1540,16 @@ tbody tr:hover {
     padding: 18px 0 0;
   }
 
+  .home-hero {
+    align-items: start;
+    gap: 34px;
+    padding-top: 26px;
+  }
+
+  .hero-stat-panel {
+    width: 100%;
+  }
+
   .section-rail button::before {
     display: none;
   }
@@ -1553,6 +1606,11 @@ tbody tr:hover {
     min-height: auto;
   }
 
+  .home-view::before {
+    bottom: 16vh;
+    opacity: 0.26;
+  }
+
   .hero-stat-panel {
     border-left: 0;
     margin-bottom: 0;
@@ -1581,6 +1639,10 @@ tbody tr:hover {
 
   .loader-stage {
     width: min(620px, 90vw);
+  }
+
+  .ship {
+    transform-origin: left bottom;
   }
 
   .admin-table th:last-child,
@@ -1639,5 +1701,9 @@ tbody tr:hover {
     align-items: start;
     flex-direction: column;
     gap: 10px;
+  }
+
+  .section-rail {
+    grid-template-columns: 1fr 1fr;
   }
 }

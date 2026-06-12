@@ -174,6 +174,11 @@ function enhanceRollingText() {
   const selector = [
     ".brand",
     ".section-rail button",
+    ".home-hero h1",
+    ".section-head h2",
+    ".dashboard-head h1",
+    ".command-copy h2",
+    ".panel-toolbar h2",
     ".panel-kicker",
     ".section-title",
     ".tool-status",
@@ -191,7 +196,7 @@ function enhanceRollingText() {
     element.dataset.rollEnhanced = "true";
     element.dataset.revealText = text;
     element.setAttribute("aria-label", text);
-    element.innerHTML = `<span class="roll-text" aria-hidden="true"><span class="roll-text__inner"><span>${escapeHtml(text)}</span><span>${escapeHtml(text)}</span></span></span>`;
+    element.innerHTML = `<span class="reveal-text" aria-hidden="true">${escapeHtml(text)}</span>`;
     element.addEventListener("mouseenter", () => runLetterReveal(element));
     element.addEventListener("focus", () => runLetterReveal(element));
     element.addEventListener("touchstart", () => runLetterReveal(element), { passive: true });
@@ -212,8 +217,8 @@ function runLetterReveal(element) {
   const finalText = element.dataset.revealText || element.getAttribute("aria-label") || "";
   if (!finalText) return;
   window.clearInterval(revealTimers.get(element));
-  const targets = element.querySelectorAll(".roll-text__inner span");
-  if (!targets.length) return;
+  const target = element.querySelector(".reveal-text");
+  if (!target) return;
 
   let tick = 0;
   const maxTicks = Math.max(8, finalText.length + 4);
@@ -221,14 +226,10 @@ function runLetterReveal(element) {
     tick += 1;
     const progress = Math.max(0, tick - 3);
     const value = tick >= maxTicks ? finalText : randomizeText(finalText, progress);
-    targets.forEach((target) => {
-      target.textContent = value;
-    });
+    target.textContent = value;
     if (tick >= maxTicks) {
       window.clearInterval(timer);
-      targets.forEach((target) => {
-        target.textContent = finalText;
-      });
+      target.textContent = finalText;
     }
   }, 28);
   revealTimers.set(element, timer);
