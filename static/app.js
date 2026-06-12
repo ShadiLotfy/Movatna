@@ -29,8 +29,8 @@ const revealChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const homeSections = {
   future: {
     kicker: "Future",
-    headline: "Booking\nExtraction",
-    intro: "Movanta turns shipment documents into clean operational intelligence inside a secure, cinematic workspace built for fast-moving logistics teams.",
+    headline: "Limitless\nLogistics.\nIntelligent\nShipping.",
+    intro: "Movanta transforms booking PDFs into clear maritime intelligence for teams moving cargo across complex global routes.",
   },
   innovation: {
     kicker: "Innovation",
@@ -175,6 +175,7 @@ function show(view) {
   }
   const isLoggedIn = Boolean(currentUser);
   $("publicNav").classList.toggle("hidden", isLoggedIn);
+  $("publicNavRight").classList.toggle("hidden", isLoggedIn);
   $("userBar").classList.toggle("hidden", !isLoggedIn);
 }
 
@@ -590,12 +591,13 @@ $("logoutBtn").addEventListener("click", async () => {
   }
 });
 
-$("homeNavBtn").addEventListener("click", () => {
-  closeLoginModal();
-  show("homeView");
-  window.scrollTo({ top: 0, behavior: "smooth" });
-});
 $("menuNavBtn").addEventListener("click", openLuxuryMenu);
+$("bookingNavBtn").addEventListener("click", openBookingTool);
+$("ratesNavBtn").addEventListener("click", () => showComingSoon("Rates Comparison"));
+$("docsNavBtn").addEventListener("click", () => showComingSoon("Documentation Accuracy Checker"));
+$("contactNavBtn").addEventListener("click", () => {
+  window.location.href = "mailto:movantaa@outlook.com";
+});
 $("loginNavBtn").addEventListener("click", () => show("loginView"));
 $("heroLoginBtn").addEventListener("click", () => show("loginView"));
 $("heroToolBtn").addEventListener("click", openBookingTool);
