@@ -215,37 +215,8 @@ function closeModal(id) {
 }
 
 function enhanceRollingText() {
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-  const selector = [
-    ".brand",
-    ".section-rail button",
-    ".home-hero h1",
-    ".section-head h2",
-    ".dashboard-head h1",
-    ".command-copy h2",
-    ".panel-toolbar h2",
-    ".panel-kicker",
-    ".section-title",
-    ".tool-status",
-    ".tab-button",
-    ".primary-btn",
-    ".ghost-btn:not(.modal-close):not(.admin-action)",
-    ".email-action",
-  ].join(",");
-
-  document.querySelectorAll(selector).forEach((element) => {
-    if (element.dataset.rollEnhanced === "true") return;
-    if (element.children.length && !Array.from(element.children).every((child) => child.nodeType === Node.TEXT_NODE)) return;
-    const text = element.textContent.trim();
-    if (!text || text.length > 44) return;
-    element.dataset.rollEnhanced = "true";
-    element.dataset.revealText = text;
-    element.setAttribute("aria-label", text);
-    element.innerHTML = `<span class="reveal-text" aria-hidden="true">${escapeHtml(text)}</span>`;
-    element.addEventListener("mouseenter", () => runLetterReveal(element));
-    element.addEventListener("focus", () => runLetterReveal(element));
-    element.addEventListener("touchstart", () => runLetterReveal(element), { passive: true });
-  });
+  // The reference direction now uses underline hover only; keep this as a no-op for existing calls.
+  return;
 }
 
 function randomizeText(finalText, progress) {

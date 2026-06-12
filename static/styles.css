@@ -2843,20 +2843,21 @@ table {
 }
 
 .home-view::before {
+  background-image: url("/static/assets/movanta-logistics-hero-v2.png");
   animation: none;
-  background-position: center top;
+  background-position: center center;
 }
 
 .home-view::after {
   background:
-    linear-gradient(90deg, rgba(0, 14, 18, 0.82) 0%, rgba(0, 14, 18, 0.52) 31%, rgba(0, 14, 18, 0.2) 67%, rgba(0, 14, 18, 0.48) 100%),
-    linear-gradient(180deg, rgba(0, 13, 17, 0.2), rgba(0, 13, 17, 0.08) 48%, rgba(0, 13, 17, 0.72));
+    linear-gradient(90deg, rgba(0, 18, 22, 0.66) 0%, rgba(0, 18, 22, 0.42) 31%, rgba(0, 18, 22, 0.12) 66%, rgba(0, 18, 22, 0.2) 100%),
+    linear-gradient(180deg, rgba(0, 13, 17, 0.18), rgba(0, 13, 17, 0.04) 48%, rgba(0, 13, 17, 0.44));
 }
 
 .topbar {
   background: transparent;
-  min-height: 64px;
-  padding: 22px 24px;
+  min-height: 66px;
+  padding: 22px clamp(24px, 3vw, 44px);
 }
 
 .brand {
@@ -2878,6 +2879,12 @@ table {
 .admin-action {
   letter-spacing: 0.08em;
   position: relative;
+}
+
+.public-nav-left .ghost-btn:first-of-type,
+.public-nav-right .icon-btn:first-of-type {
+  border-left: 1px solid rgba(255, 255, 255, 0.28);
+  padding-left: 26px;
 }
 
 .underline-link,
@@ -2945,6 +2952,29 @@ table {
   width: 28px;
 }
 
+.account-icon::before {
+  border: 1.4px solid currentColor;
+  border-radius: 50%;
+  content: "";
+  height: 8px;
+  left: 10px;
+  position: absolute;
+  top: 4px;
+  width: 8px;
+}
+
+.account-icon::after {
+  border: 1.4px solid currentColor;
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  content: "";
+  height: 8px;
+  left: 6px;
+  position: absolute;
+  top: 17px;
+  width: 16px;
+}
+
 .search-icon::before {
   border: 1.5px solid currentColor;
   border-radius: 50%;
@@ -2973,7 +3003,8 @@ table {
 
 .home-hero .hero-copy {
   margin-left: 2px;
-  margin-top: 9vh;
+  margin-top: 2vh;
+  max-width: 520px;
 }
 
 .home-hero .panel-kicker {
@@ -2981,9 +3012,10 @@ table {
 }
 
 .home-hero .hero-copy h1 {
-  font-size: clamp(42px, 3.9vw, 74px);
-  letter-spacing: 0.025em;
+  font-size: clamp(36px, 3.35vw, 64px);
+  letter-spacing: 0.03em;
   line-height: 1.18;
+  max-width: 500px;
 }
 
 .hero-blur-reveal {
@@ -3012,9 +3044,9 @@ table {
 .home-hero .primary-btn,
 .home-hero .ghost-btn {
   border-bottom: 1px solid rgba(255, 255, 255, 0.72);
-  font-size: 14px;
+  font-size: 13px;
   letter-spacing: 0.1em;
-  min-width: 226px;
+  min-width: 254px;
   padding-bottom: 14px;
 }
 
