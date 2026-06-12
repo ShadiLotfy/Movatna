@@ -177,6 +177,7 @@ function show(view) {
   $("publicNav").classList.toggle("hidden", isLoggedIn);
   $("publicNavRight").classList.toggle("hidden", isLoggedIn);
   $("userBar").classList.toggle("hidden", !isLoggedIn);
+  if (view === "homeView" || view === "loginView") initHeroReveal();
 }
 
 function closeLoginModal() {
@@ -192,6 +193,17 @@ function openLuxuryMenu() {
 function closeLuxuryMenu() {
   $("luxuryMenu").classList.add("hidden");
   $("luxuryMenu").setAttribute("aria-hidden", "true");
+}
+
+function initHeroReveal() {
+  const headline = $("homeHeadline");
+  if (!headline) return;
+  if (window.sessionStorage.getItem("movantaHeroRevealed") === "true") {
+    headline.classList.add("hero-clear");
+    return;
+  }
+  headline.classList.add("hero-blur-reveal");
+  window.sessionStorage.setItem("movantaHeroRevealed", "true");
 }
 
 function openModal(id) {
@@ -598,9 +610,16 @@ $("docsNavBtn").addEventListener("click", () => showComingSoon("Documentation Ac
 $("contactNavBtn").addEventListener("click", () => {
   window.location.href = "mailto:movantaa@outlook.com";
 });
+$("searchNavBtn").addEventListener("click", () => showComingSoon("Search"));
 $("loginNavBtn").addEventListener("click", () => show("loginView"));
 $("heroLoginBtn").addEventListener("click", () => show("loginView"));
 $("heroToolBtn").addEventListener("click", openBookingTool);
+$("registerLinkBtn").addEventListener("click", () => {
+  window.location.href = "mailto:movantaa@outlook.com?subject=Movanta%20Access%20Request";
+});
+$("forgotPasswordBtn").addEventListener("click", () => {
+  window.location.href = "mailto:movantaa@outlook.com?subject=Movanta%20Password%20Help";
+});
 $("userHomeBtn").addEventListener("click", () => {
   show("homeView");
   window.scrollTo({ top: 0, behavior: "smooth" });

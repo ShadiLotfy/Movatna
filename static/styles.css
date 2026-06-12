@@ -2804,3 +2804,340 @@ select,
     max-width: 92vw;
   }
 }
+
+/* Minimal reference alignment: Megabyte fallback, calmer motion, underline interactions. */
+:root {
+  --font: "Megabyte", "Montserrat", "Arial", sans-serif;
+  --serif: "Megabyte", "Montserrat", "Arial", sans-serif;
+}
+
+body,
+button,
+input,
+select,
+textarea,
+table {
+  font-family: var(--font);
+}
+
+.site-bg::before,
+.site-bg::after,
+.bg-grid,
+.bg-horizon,
+.page-frame,
+.home-view .bg-waves {
+  display: none;
+}
+
+.bg-waves {
+  opacity: 0.12;
+}
+
+.home-view,
+.dashboard,
+.tools-section,
+.auth-panel,
+.modal-overlay,
+.luxury-menu {
+  animation-duration: 0.28s;
+}
+
+.home-view::before {
+  animation: none;
+  background-position: center top;
+}
+
+.home-view::after {
+  background:
+    linear-gradient(90deg, rgba(0, 14, 18, 0.82) 0%, rgba(0, 14, 18, 0.52) 31%, rgba(0, 14, 18, 0.2) 67%, rgba(0, 14, 18, 0.48) 100%),
+    linear-gradient(180deg, rgba(0, 13, 17, 0.2), rgba(0, 13, 17, 0.08) 48%, rgba(0, 13, 17, 0.72));
+}
+
+.topbar {
+  background: transparent;
+  min-height: 64px;
+  padding: 22px 24px;
+}
+
+.brand {
+  font-size: clamp(21px, 1.5vw, 28px);
+  font-weight: 900;
+  letter-spacing: 0.13em;
+}
+
+.brand-sub {
+  display: none;
+}
+
+.public-nav .ghost-btn,
+.menu-btn,
+.userbar .ghost-btn,
+.tab-button,
+.primary-btn,
+.email-action,
+.admin-action {
+  letter-spacing: 0.08em;
+  position: relative;
+}
+
+.underline-link,
+.public-nav .ghost-btn,
+.menu-btn,
+.userbar .ghost-btn,
+.menu-links button,
+.home-hero .primary-btn,
+.home-hero .ghost-btn,
+.login-links button,
+.site-footer a {
+  position: relative;
+}
+
+.underline-link::after,
+.public-nav .ghost-btn::after,
+.menu-btn::after,
+.userbar .ghost-btn::after,
+.menu-links button::after,
+.home-hero .primary-btn::before,
+.home-hero .ghost-btn::before,
+.login-links button::after,
+.site-footer a::after {
+  background: currentColor;
+  bottom: -6px;
+  content: "";
+  height: 1px;
+  left: 0;
+  position: absolute;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.28s ease;
+  width: 100%;
+}
+
+.underline-link:hover::after,
+.underline-link:focus-visible::after,
+.public-nav .ghost-btn:hover::after,
+.public-nav .ghost-btn:focus-visible::after,
+.menu-btn:hover::after,
+.menu-btn:focus-visible::after,
+.userbar .ghost-btn:hover::after,
+.userbar .ghost-btn:focus-visible::after,
+.menu-links button:hover::after,
+.menu-links button:focus-visible::after,
+.home-hero .primary-btn:hover::before,
+.home-hero .primary-btn:focus-visible::before,
+.home-hero .ghost-btn:hover::before,
+.home-hero .ghost-btn:focus-visible::before,
+.login-links button:hover::after,
+.login-links button:focus-visible::after,
+.site-footer a:hover::after,
+.site-footer a:focus-visible::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+.icon-btn {
+  background: transparent;
+  border: 0;
+  color: var(--paper);
+  height: 28px;
+  padding: 0;
+  position: relative;
+  width: 28px;
+}
+
+.search-icon::before {
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+  content: "";
+  height: 13px;
+  left: 4px;
+  position: absolute;
+  top: 4px;
+  width: 13px;
+}
+
+.search-icon::after {
+  background: currentColor;
+  content: "";
+  height: 1.5px;
+  left: 17px;
+  position: absolute;
+  top: 18px;
+  transform: rotate(45deg);
+  width: 8px;
+}
+
+.menu-btn::before {
+  width: 20px;
+}
+
+.home-hero .hero-copy {
+  margin-left: 2px;
+  margin-top: 9vh;
+}
+
+.home-hero .panel-kicker {
+  display: none;
+}
+
+.home-hero .hero-copy h1 {
+  font-size: clamp(42px, 3.9vw, 74px);
+  letter-spacing: 0.025em;
+  line-height: 1.18;
+}
+
+.hero-blur-reveal {
+  animation: heroBlurClear 1.45s ease-out both;
+}
+
+.hero-clear {
+  filter: blur(0);
+  opacity: 1;
+}
+
+@keyframes heroBlurClear {
+  from {
+    filter: blur(14px);
+    opacity: 0.2;
+    transform: translateY(8px);
+  }
+
+  to {
+    filter: blur(0);
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.home-hero .primary-btn,
+.home-hero .ghost-btn {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.72);
+  font-size: 14px;
+  letter-spacing: 0.1em;
+  min-width: 226px;
+  padding-bottom: 14px;
+}
+
+.home-hero .primary-btn::after,
+.home-hero .ghost-btn::after {
+  content: "->";
+}
+
+.auth-panel {
+  background: rgba(0, 0, 0, 0.84);
+  grid-template-columns: 1fr;
+  justify-items: center;
+}
+
+.auth-panel > .hero-copy {
+  display: none;
+}
+
+.login-card {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  max-width: 430px;
+  padding: 0;
+  width: min(100%, 430px);
+}
+
+.login-card .panel-kicker {
+  color: var(--paper);
+  font-size: clamp(28px, 4vw, 42px);
+  letter-spacing: 0.05em;
+  margin-bottom: 34px;
+  text-align: center;
+}
+
+.login-card label {
+  gap: 10px;
+}
+
+.login-card label span {
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+}
+
+.login-card input {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.46);
+  color: #fff;
+  padding: 12px 0;
+}
+
+.login-card input:focus {
+  border-bottom-color: #fff;
+  box-shadow: none;
+  outline: none;
+}
+
+.login-card .primary-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  color: #fff;
+  justify-content: center;
+  margin-top: 10px;
+  width: 100%;
+}
+
+.login-links {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 18px;
+}
+
+.login-links button {
+  background: transparent;
+  border: 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  padding: 0 0 4px;
+  text-transform: uppercase;
+}
+
+.login-card .access-note {
+  color: rgba(255, 255, 255, 0.56);
+  font-size: 11px;
+  line-height: 1.6;
+  margin-top: 30px;
+  text-align: center;
+}
+
+.login-close {
+  right: -8px;
+  top: -40px;
+}
+
+.tool-card,
+.command-panel,
+.data-panel,
+.admin-panel,
+.analytics-card,
+.kpi-card,
+.usage-row,
+.modal-box {
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: none;
+}
+
+@media (max-width: 760px) {
+  .public-nav-left {
+    gap: 8px;
+  }
+
+  .public-nav-right {
+    gap: 14px;
+  }
+
+  .search-icon {
+    display: none;
+  }
+
+  .home-hero .hero-copy {
+    margin-top: 7vh;
+  }
+}
