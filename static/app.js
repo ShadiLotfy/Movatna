@@ -26,7 +26,7 @@ const revealChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 const homeSections = {
   future: {
     kicker: "Future",
-    headline: "Booking extraction for modern logistics.",
+    headline: "Booking\nExtraction",
     intro: "Movanta turns shipment documents into clean operational intelligence inside a secure, cinematic workspace built for fast-moving logistics teams.",
   },
   innovation: {

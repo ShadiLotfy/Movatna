@@ -290,8 +290,8 @@ label span,
 .home-hero {
   align-items: center;
   display: grid;
-  gap: clamp(24px, 4.5vw, 76px);
-  grid-template-columns: minmax(118px, 0.16fr) minmax(0, 0.98fr) minmax(300px, 0.38fr);
+  gap: clamp(24px, 3.8vw, 64px);
+  grid-template-columns: minmax(118px, 0.14fr) minmax(0, 0.82fr) minmax(320px, 0.36fr);
   min-height: calc(100vh - 174px);
   padding-top: clamp(16px, 4.5vw, 72px);
 }
@@ -502,7 +502,20 @@ label span,
 }
 
 .home-hero .hero-copy {
-  max-width: 840px;
+  max-width: 760px;
+  min-width: 0;
+}
+
+#homeHeadline {
+  font-size: clamp(78px, 8.2vw, 156px);
+  letter-spacing: 0.015em;
+  line-height: 0.82;
+  max-width: 760px;
+  white-space: pre-line;
+}
+
+#homeHeadline .reveal-text {
+  white-space: pre-line;
 }
 
 .login-card,
@@ -593,6 +606,7 @@ label span {
 
 .file-picker {
   cursor: pointer;
+  position: relative;
 }
 
 .file-input {
@@ -786,7 +800,15 @@ button:disabled {
 
 .dashboard-head {
   border-bottom: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
   padding-bottom: clamp(18px, 3vw, 34px);
+}
+
+.dashboard-head h1 {
+  font-size: clamp(58px, 7.2vw, 118px);
+  max-width: 1120px;
 }
 
 .panel-grid,
@@ -800,7 +822,7 @@ button:disabled {
   align-items: start;
   display: grid;
   gap: clamp(18px, 2.4vw, 28px);
-  grid-template-columns: minmax(260px, 0.34fr) minmax(0, 1fr);
+  grid-template-columns: minmax(360px, 0.34fr) minmax(0, 1fr);
   padding: clamp(20px, 2.8vw, 34px);
   position: relative;
 }
@@ -816,7 +838,12 @@ button:disabled {
 }
 
 .command-copy h2 {
-  max-width: 460px;
+  font-size: clamp(30px, 3vw, 48px);
+  max-width: 360px;
+}
+
+.command-copy {
+  min-width: 0;
 }
 
 .upload-form {
@@ -824,6 +851,7 @@ button:disabled {
   display: grid;
   gap: 18px;
   grid-template-columns: minmax(0, 1fr) minmax(180px, auto);
+  min-width: 0;
 }
 
 .upload-limit-card {
@@ -1309,11 +1337,62 @@ tbody tr:hover {
 }
 
 .plain-preview {
-  background: #fff;
-  color: #111;
+  background:
+    linear-gradient(180deg, rgba(216, 243, 255, 0.055), rgba(216, 243, 255, 0.015)),
+    rgba(1, 7, 11, 0.86);
+  border: 1px solid rgba(216, 243, 255, 0.22);
+  color: var(--ink);
   margin-bottom: 16px;
   overflow-x: auto;
   padding: 14px;
+  scrollbar-color: rgba(183, 231, 247, 0.5) rgba(216, 243, 255, 0.08);
+  scrollbar-width: thin;
+}
+
+.plain-preview table {
+  background: transparent !important;
+  border: 1px solid rgba(216, 243, 255, 0.2) !important;
+  color: var(--ink) !important;
+  min-width: 560px !important;
+  width: 100% !important;
+}
+
+.plain-preview th,
+.plain-preview td {
+  background: rgba(3, 12, 18, 0.72) !important;
+  border: 1px solid rgba(216, 243, 255, 0.16) !important;
+  color: rgba(234, 247, 255, 0.92) !important;
+  font-family: var(--font) !important;
+  font-size: 14px !important;
+  letter-spacing: 0.04em;
+  padding: 12px 14px !important;
+  text-align: left !important;
+}
+
+.plain-preview th {
+  background: rgba(183, 231, 247, 0.1) !important;
+  color: var(--paper) !important;
+  font-weight: 900 !important;
+  text-align: center !important;
+  text-transform: uppercase;
+}
+
+.plain-preview td:first-child {
+  color: var(--gold-soft) !important;
+  font-weight: 900 !important;
+  text-transform: uppercase;
+}
+
+.plain-preview td:last-child {
+  color: var(--paper) !important;
+}
+
+.modal-box:has(.plain-preview) {
+  max-width: min(720px, calc(100vw - 36px));
+}
+
+.modal-box:has(.plain-preview) .primary-btn {
+  margin-top: 2px;
 }
 
 .loader {
@@ -1612,6 +1691,10 @@ tbody tr:hover {
     align-items: start;
     gap: 34px;
     padding-top: 26px;
+  }
+
+  .dashboard-head {
+    grid-template-columns: 1fr;
   }
 
   .hero-stat-panel {
