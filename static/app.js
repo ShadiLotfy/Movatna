@@ -18,6 +18,8 @@ let currentUser = null;
 let rows = [];
 let users = [];
 let analytics = null;
+let activeTab = "dashboard";
+let analyticsPollTimer = null;
 let loaderProgress = 0;
 let loaderTimer = null;
 let loaderHideTimer = null;
@@ -273,6 +275,7 @@ function setUser(user) {
 
 function signOutUser() {
   currentUser = null;
+  stopAnalyticsPolling();
   rows = [];
   $("pdfInput").value = "";
   updateFileCount();
@@ -699,23 +702,52 @@ $("adminTab").addEventListener("click", async () => {
 });
 
 function setTab(tab) {
+  activeTab = tab;
   $("extractPanel").classList.toggle("hidden", tab !== "dashboard");
   $("adminPanel").classList.toggle("hidden", tab !== "admin");
   $("dashboardTab").classList.toggle("active", tab === "dashboard");
   $("adminTab").classList.toggle("active", tab === "admin");
+  if (tab === "admin") {
+    startAnalyticsPolling();
+  } else {
+    stopAnalyticsPolling();
+  }
 }
 
-async function loadUsers(showProgress = true) {
+function setAnalyticsLiveStatus(state, message) {
+  const el = $("analyticsLiveStatus");
+  if (!el) return;
+  el.className = `live-status ${state || ""}`.trim();
+  el.textContent = message;
+}
+
+function startAnalyticsPolling() {
+  if (analyticsPollTimer || !currentUser?.isAdmin) return;
+  setAnalyticsLiveStatus("loading", "Syncing");
+  analyticsPollTimer = window.setInterval(() => {
+    if (activeTab === "admin" && currentUser?.isAdmin) loadUsers(false, true);
+  }, 10000);
+}
+
+function stopAnalyticsPolling() {
+  window.clearInterval(analyticsPollTimer);
+  analyticsPollTimer = null;
+}
+
+async function loadUsers(showProgress = true, quiet = false) {
   if (showProgress) showLoader(true, "Loading users");
   try {
+    setAnalyticsLiveStatus("loading", showProgress ? "Loading" : "Syncing");
     const [userData, analyticsData] = await Promise.all([api("/api/admin/users"), api("/api/admin/analytics")]);
     const data = userData;
     users = data.users || [];
     analytics = analyticsData;
     renderUsers();
     renderAnalytics();
+    setAnalyticsLiveStatus("live", "Live");
   } catch (error) {
-    toast(error.message, true);
+    setAnalyticsLiveStatus("error", "Offline");
+    if (!quiet) toast(error.message, true);
   } finally {
     if (showProgress) showLoader(false);
   }
@@ -772,6 +804,26 @@ function renderAnalytics() {
         </div>`;
     })
     .join("");
+
+  $("recentUploadList").innerHTML = (analytics.recentUploads || []).length
+    ? analytics.recentUploads
+        .map((item) => {
+          const date = item.createdAt ? new Date(item.createdAt).toLocaleString() : "-";
+          const status = String(item.status || "").toLowerCase();
+          return `
+            <div class="recent-row ${status}">
+              <div>
+                <strong>${escapeHtml(item.fileName || "-")}</strong>
+                <span>${escapeHtml(item.userName || "-")} / ${escapeHtml(item.userEmail || "-")}</span>
+              </div>
+              <div>
+                <b>${escapeHtml(item.line || "Unknown")}</b>
+                <span>${escapeHtml(status || "-")} / ${escapeHtml(date)}</span>
+              </div>
+            </div>`;
+        })
+        .join("")
+    : `<div class="empty-state">No upload activity yet.</div>`;
   enhanceRollingText();
 }
 

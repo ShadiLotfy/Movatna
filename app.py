@@ -284,6 +284,7 @@ def upload_usage_for_user(user_id: int) -> int:
 def build_admin_analytics() -> dict:
     users = AuthorizedUser.query.order_by(AuthorizedUser.created_at.desc(), AuthorizedUser.email.asc()).all()
     histories = UploadHistory.query.order_by(UploadHistory.created_at.desc()).all()
+    users_by_id = {user.id: user for user in users}
     now = utcnow()
     today = now.date()
 
@@ -335,6 +336,19 @@ def build_admin_analytics() -> dict:
         },
         "shippingLines": shipping_lines,
         "users": user_rows,
+        "recentUploads": [
+            {
+                "id": item.id,
+                "userId": item.user_id,
+                "userName": (users_by_id[item.user_id].full_name if item.user_id in users_by_id else "") or "Unknown user",
+                "userEmail": users_by_id[item.user_id].email if item.user_id in users_by_id else "",
+                "fileName": item.file_name,
+                "line": item.extracted_line or "Unknown",
+                "status": item.status,
+                "createdAt": item.created_at.isoformat() if item.created_at else None,
+            }
+            for item in histories[:12]
+        ],
     }
 
 

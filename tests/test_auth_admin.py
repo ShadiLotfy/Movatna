@@ -160,7 +160,9 @@ class AuthAdminTests(unittest.TestCase):
             },
         )
         self.assertEqual(create.status_code, 201, create.get_data(as_text=True))
-        password = create.get_json()["generatedPassword"]
+        created_user = create.get_json()
+        user_id = created_user["user"]["id"]
+        password = created_user["generatedPassword"]
 
         self.client.post("/api/auth/logout")
         login = self.client.post("/api/auth/login", json={"identifier": "analytics", "password": password})
@@ -190,9 +192,19 @@ class AuthAdminTests(unittest.TestCase):
         data = analytics.get_json()
         self.assertEqual(data["kpis"]["totalUploadsProcessed"], 2)
         self.assertEqual(data["kpis"]["mostUsedShippingLine"]["line"], "MAERSK")
+        self.assertEqual({item["fileName"] for item in data["recentUploads"]}, {"one.pdf", "two.pdf"})
+        self.assertEqual({item["line"] for item in data["recentUploads"]}, {"MAERSK", "MSC"})
         user_row = next(item for item in data["users"] if item["username"] == "analytics")
         self.assertEqual(user_row["uploadsUsed"], 2)
         self.assertEqual(user_row["uploadsRemaining"], 1)
+
+        disable = self.client.patch(f"/api/admin/users/{user_id}", json={"isActive": False})
+        self.assertEqual(disable.status_code, 200, disable.get_data(as_text=True))
+        refreshed = self.client.get("/api/admin/analytics")
+        self.assertEqual(refreshed.status_code, 200, refreshed.get_data(as_text=True))
+        refreshed_data = refreshed.get_json()
+        self.assertEqual(refreshed_data["kpis"]["activeUsers"], 1)
+        self.assertEqual(refreshed_data["kpis"]["disabledDeletedUsers"], 1)
 
 
 if __name__ == "__main__":

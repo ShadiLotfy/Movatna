@@ -828,6 +828,59 @@ button:disabled {
   padding-bottom: 16px;
 }
 
+.live-status {
+  align-items: center;
+  border: 1px solid rgba(216, 243, 255, 0.25);
+  color: var(--paper);
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 900;
+  gap: 10px;
+  justify-content: center;
+  letter-spacing: 0.16em;
+  min-height: 38px;
+  padding: 0 14px;
+  text-transform: uppercase;
+}
+
+.live-status::before {
+  background: var(--ok);
+  border-radius: 999px;
+  box-shadow: 0 0 14px rgba(109, 226, 174, 0.58);
+  content: "";
+  height: 7px;
+  width: 7px;
+}
+
+.live-status.loading::before {
+  animation: livePulse 0.9s ease-in-out infinite;
+  background: var(--gold-soft);
+  box-shadow: 0 0 14px rgba(234, 214, 165, 0.5);
+}
+
+.live-status.error {
+  border-color: rgba(255, 106, 95, 0.5);
+  color: #ffb6af;
+}
+
+.live-status.error::before {
+  background: var(--danger);
+  box-shadow: 0 0 14px rgba(255, 106, 95, 0.5);
+}
+
+@keyframes livePulse {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(0.76);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .kpi-grid {
   display: grid;
   gap: 12px;
@@ -881,17 +934,20 @@ button:disabled {
 }
 
 .line-chart,
-.usage-list {
+.usage-list,
+.recent-list {
   display: grid;
   gap: 12px;
 }
 
-.line-row {
+.line-row,
+.recent-row {
   display: grid;
   gap: 10px;
 }
 
 .line-row > div,
+.recent-row > div,
 .usage-main,
 .usage-meta {
   align-items: center;
@@ -901,10 +957,39 @@ button:disabled {
 }
 
 .line-row strong,
+.recent-row strong,
 .usage-main strong {
   color: var(--paper);
   font-size: 15px;
   letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.recent-row {
+  border: 1px solid rgba(216, 243, 255, 0.12);
+  padding: 13px 14px;
+}
+
+.recent-row.success {
+  border-left-color: rgba(109, 226, 174, 0.72);
+}
+
+.recent-row.failed {
+  border-left-color: rgba(255, 106, 95, 0.72);
+}
+
+.recent-row b {
+  color: var(--gold-soft);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.recent-row span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -1910,7 +1995,8 @@ tbody tr:hover {
 
   .usage-main,
   .usage-meta,
-  .line-row > div {
+  .line-row > div,
+  .recent-row > div {
     align-items: flex-start;
     flex-direction: column;
   }
