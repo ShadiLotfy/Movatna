@@ -18,7 +18,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 import re
+import shutil
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -146,6 +148,13 @@ def read_pdf_text_with_ocr(path: str | Path) -> str:
         from PIL import Image
     except ImportError:
         logger.info("OCR fallback unavailable for %s; install PyMuPDF, Pillow, and pytesseract", path)
+        return ""
+
+    tesseract_cmd = os.environ.get("TESSERACT_CMD", "").strip()
+    if tesseract_cmd:
+        pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+    elif not shutil.which("tesseract"):
+        logger.warning("OCR fallback unavailable for %s: Tesseract executable is not installed or not on PATH", path)
         return ""
 
     chunks: list[str] = []
@@ -454,10 +463,10 @@ def detect_line(text: str) -> str:
     """Detect the carrier from PDF text only; filenames are never used."""
     hay = text or ""
     checks = [
+        ("COSCO", r"COSCO SHIPPING|coscon\.com|\bCOEU\d+"),
         ("CMA CGM", r"CMA\s*CGM|C\s*C for Maritime Shipping Agencies|cma-cgm|\bCFA\d{7}\b"),
         ("MSC", r"\bMSC\b|Mediterranean Shipping|\bEBKG\d+"),
         ("ONE", r"Ocean Network Express|\bONEY[A-Z0-9]+|\bALYG\d+"),
-        ("COSCO", r"COSCO SHIPPING|coscon\.com|\bCOEU\d+"),
         ("Hapag-Lloyd", r"Hapag-Lloyd|HAPAG-LLOYD|HLCU|Our Reference:\s*\d+"),
         ("Maersk", r"\bMaersk\b|Booking No\s*\.?:\s*\d+"),
         ("Yang Ming", r"Yang Ming|YMEG\d+|YM WORLD"),
@@ -597,7 +606,7 @@ def parse_cosco(text: str) -> dict[str, str]:
     record = base_record("COSCO")
     record.update(
         {
-            "Booking No.": first_match(s, [r"BOOKING NUMBER:\s*([A-Z]{4}\s*\d+)", r"\b(COEU\s*\d+)\b"]),
+            "Booking No.": first_match(s, [r"BOOKING NUMBER:\s*((?:[A-Z]{4}\s*)?\d{7,12})", r"\b(COEU\s*\d+)\b"]),
             "Equipment": first_match(s, [r"(?:QTY SIZE/TYPE|BOOKING QTY SIZE/TYPE):\s*([0-9]+\s*x\s*[0-9]+'?\s*Hi-?Cube Container)"]),
             "Vessel Name": vv["vessel"],
             "Voyage No.": vv["voyage"],
@@ -605,7 +614,7 @@ def parse_cosco(text: str) -> dict[str, str]:
             "Port of Discharge": first_match(s, [r"PORT OF DISCHARGE:\s*(.+?)\s+FINAL DESTINATION:"]),
             "Final Dest.": first_match(s, [r"FINAL DESTINATION:\s*(.+?)\s+ESTIMATED CARGO"]),
             "ETS POL / Sailing Date": first_match(s, [rf"INTENDED VESSEL/VOYAGE:.*?ETD:\s*({DATE_RE})"]),
-            "ETA POD / Arrival Date": first_match(s, [rf"ESTIMATED CARGO AVAILABILITY AT DESTINATION HUB:\s*({DATE_RE})"]),
+            "ETA POD / Arrival Date": first_match(s, [rf"PORT OF DISCHARGE:.*?ETA:\s*({DATE_RE})\s+FINAL DESTINATION", rf"ESTIMATED CARGO AVAILABILITY AT DESTINATION HUB:\s*({DATE_RE})"]),
         }
     )
     return finalize(record)
@@ -894,10 +903,14 @@ def parse_booking_pdf(path: str | Path) -> dict[str, str]:
             break
         tried_ocr = True
         ocr_text = read_pdf_text_with_ocr(path)
-        if compact_len(ocr_text) <= max((compact_len(doc.text) for doc in documents), default=0):
+        if compact_len(ocr_text) < 20:
             attempts.append("ocr-pytesseract: unavailable, weak, or no improvement")
         else:
             documents.append(ExtractedDocument(ocr_text, "ocr-pytesseract", char_count=len(ocr_text)))
+            best_normal_text = max((doc.text for doc in documents if doc.method != "ocr-pytesseract"), key=compact_len, default="")
+            if best_normal_text:
+                combined_text = f"{ocr_text}\n{best_normal_text}"
+                documents.append(ExtractedDocument(combined_text, "combined-text-ocr", char_count=len(combined_text)))
 
     detail = "; ".join(attempts[-6:]) or "No readable PDF text"
     raise ManualReviewRequired(f"Could not confidently extract this PDF. Please review manually. {detail}")

@@ -43,6 +43,7 @@ JWT_SECRET=replace-with-a-64-character-random-secret
 COOKIE_SECURE=false
 FLASK_ENV=development
 PYTHON_ENV=development
+TESSERACT_CMD=
 ```
 
 Generate a strong JWT secret:
@@ -63,6 +64,26 @@ python app.py
 ```
 
 Open `http://localhost:7823`.
+
+### OCR Setup
+
+Movanta uses free local OCR only when normal PDF text extraction is empty or cannot satisfy required fields.
+
+Python packages are installed from `requirements.txt`:
+
+```text
+PyMuPDF
+pdfplumber
+Pillow
+pytesseract
+```
+
+Tesseract itself is a system executable and must also be installed:
+
+- Windows: install Tesseract OCR, then set `TESSERACT_CMD` in `.env`, for example `C:\Program Files\Tesseract-OCR\tesseract.exe`.
+- Linux/Render: `Aptfile` installs `tesseract-ocr`.
+
+If Tesseract is missing, the extractor still tries selectable-text paths first, but scanned PDFs cannot OCR until the binary is available.
 
 ## User Management
 
@@ -146,7 +167,8 @@ Build command: pip install -r requirements.txt
 Start command: gunicorn app:app --bind 0.0.0.0:$PORT
 ```
 
-4. Set environment variables:
+4. Render also reads `Aptfile` and installs `tesseract-ocr` for OCR fallback.
+5. Set environment variables:
 
 ```env
 ADMIN_EMAIL=
@@ -158,6 +180,7 @@ JWT_SECRET=
 COOKIE_SECURE=true
 FLASK_ENV=production
 PYTHON_ENV=production
+TESSERACT_CMD=
 ```
 
 ## Testing

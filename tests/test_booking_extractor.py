@@ -133,6 +133,25 @@ class BookingExtractorTests(unittest.TestCase):
         self.assertTrue(ocr.called)
         self.assertEqual(row["Booking No."], EXPECTED["11.pdf"]["Booking No."])
 
+    def test_ocr_runs_when_required_fields_are_missing(self):
+        ocr_text = read_pdf_text(ROOT / "11.pdf")
+        weak_text = "COSCO SHIPPING Booking Confirmation BOOKING NUMBER: 9020000000"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "tmpb7jxl77f.pdf"
+            writer = PdfWriter()
+            writer.add_blank_page(width=300, height=300)
+            with path.open("wb") as handle:
+                writer.write(handle)
+            with patch("booking_extractor.read_pdf_text", return_value=weak_text), patch(
+                "booking_extractor.read_pdf_text_pymupdf", return_value=""
+            ), patch("booking_extractor.read_pdf_text_pdfplumber", return_value=""), patch(
+                "booking_extractor.read_pdf_text_with_ocr", return_value=ocr_text
+            ) as ocr:
+                row = parse_booking_pdf(path)
+
+        self.assertTrue(ocr.called)
+        self.assertEqual(row["Booking No."], EXPECTED["11.pdf"]["Booking No."])
+
     def test_missing_required_fields_retry_with_alternate_text_method(self):
         valid_text = read_pdf_text(ROOT / "11.pdf")
         weak_text = "CMA CGM Booking Number: CFA1234567"
