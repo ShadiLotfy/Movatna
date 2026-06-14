@@ -446,6 +446,28 @@ function buildEmailTable(row) {
   </table>`;
 }
 
+function buildPreviewTable(row) {
+  const previewRows = schema
+    .map((label) => {
+      const value = rowValue(row, label) || "N/A";
+      return `<tr>
+        <th scope="row">${headerLabel(label)}</th>
+        <td class="${cellClass(label, value)}">${escapeHtml(value)}</td>
+      </tr>`;
+    })
+    .join("");
+
+  return `<table class="modal-preview-table">
+    <thead>
+      <tr>
+        <th scope="col">Field</th>
+        <th scope="col">Value</th>
+      </tr>
+    </thead>
+    <tbody>${previewRows}</tbody>
+  </table>`;
+}
+
 function buildEmailTables(selectedRows) {
   return selectedRows.map((row) => buildEmailTable(row)).join('<div style="height:16px;line-height:16px;">&nbsp;</div>');
 }
@@ -522,8 +544,12 @@ async function bootstrap() {
   renderTable();
   try {
     const { user } = await api("/api/me");
-    setUser(user);
-    show("dashboardView");
+    if (user) {
+      setUser(user);
+      show("dashboardView");
+    } else {
+      show("homeView");
+    }
   } catch {
     show("homeView");
   } finally {
@@ -818,7 +844,7 @@ $("emailGrid").addEventListener("click", async (event) => {
     return;
   }
 
-  $("modalPreview").innerHTML = html;
+  $("modalPreview").innerHTML = buildPreviewTable(row);
   $("modalTitle").textContent = `Booking ${rowValue(row, "Booking No.") || "-"}`;
   openModal("emailCopyModal");
   $("modalCopyBtn").onclick = async () => {

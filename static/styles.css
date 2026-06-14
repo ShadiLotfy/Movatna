@@ -421,7 +421,9 @@ button {
 /* Homepage */
 .home-view {
   background: #02090d;
+  isolation: isolate;
   min-height: 100vh;
+  position: relative;
 }
 
 .home-view::before {
@@ -430,18 +432,18 @@ button {
   filter: saturate(0.9) contrast(0.98) brightness(1.04);
   inset: 0;
   position: fixed;
-  z-index: -4;
+  z-index: 0;
 }
 
 .home-view::after {
   background:
-    linear-gradient(90deg, rgba(2, 12, 17, 0.74) 0%, rgba(2, 12, 17, 0.5) 28%, rgba(2, 12, 17, 0.12) 58%, rgba(2, 12, 17, 0.1) 100%),
-    linear-gradient(180deg, rgba(2, 12, 17, 0.05), rgba(2, 12, 17, 0.12) 58%, rgba(2, 12, 17, 0.44));
+    linear-gradient(90deg, rgba(2, 12, 17, 0.68) 0%, rgba(2, 12, 17, 0.42) 28%, rgba(2, 12, 17, 0.06) 58%, rgba(2, 12, 17, 0.08) 100%),
+    linear-gradient(180deg, rgba(2, 12, 17, 0.02), rgba(2, 12, 17, 0.08) 58%, rgba(2, 12, 17, 0.34));
   content: "";
   inset: 0;
   pointer-events: none;
   position: fixed;
-  z-index: -3;
+  z-index: 1;
 }
 
 .home-hero {
@@ -449,6 +451,8 @@ button {
   display: flex;
   min-height: 100vh;
   padding: clamp(118px, 15vh, 168px) clamp(26px, 4.5vw, 84px) clamp(54px, 8vh, 94px);
+  position: relative;
+  z-index: 2;
 }
 
 .home-hero .hero-copy {
@@ -539,6 +543,8 @@ button {
     linear-gradient(180deg, rgba(2, 9, 13, 0.98), #020608),
     radial-gradient(circle at 78% 10%, rgba(217, 203, 165, 0.1), transparent 28rem);
   padding: clamp(70px, 8vw, 120px) clamp(26px, 5vw, 86px);
+  position: relative;
+  z-index: 2;
 }
 
 .section-head {
@@ -639,6 +645,12 @@ th,
   justify-items: center;
   min-height: 100vh;
   padding: calc(var(--header-height) + 72px) 24px 72px;
+  position: relative;
+  z-index: 3;
+}
+
+.view-login .home-view {
+  pointer-events: none;
 }
 
 .auth-panel > .hero-copy {
@@ -823,6 +835,7 @@ select option {
 .panel-grid {
   display: grid;
   gap: 28px;
+  min-width: 0;
 }
 
 .command-panel,
@@ -840,6 +853,7 @@ select option {
 .command-panel,
 .data-panel,
 .admin-panel {
+  min-width: 0;
   padding: clamp(24px, 3vw, 48px);
 }
 
@@ -971,7 +985,11 @@ select option {
 
 .table-scroll {
   border: 1px solid var(--line);
+  border-radius: 8px;
+  max-width: 100%;
   overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-color: rgba(217, 203, 165, 0.55) rgba(255, 255, 255, 0.06);
 }
 
 table {
@@ -991,6 +1009,7 @@ td {
 th {
   background: rgba(255, 255, 255, 0.055);
   color: var(--muted);
+  display: table-cell;
   font-size: 11px;
   white-space: nowrap;
 }
@@ -1002,6 +1021,78 @@ td {
 
 tbody tr:hover {
   background: rgba(255, 255, 255, 0.035);
+}
+
+.booking-table {
+  min-width: 1680px;
+  table-layout: fixed;
+}
+
+.booking-table th {
+  border-bottom: 1px solid var(--line-strong);
+  color: rgba(247, 244, 238, 0.68);
+  display: table-cell;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  line-height: 1.25;
+  text-transform: uppercase;
+  vertical-align: bottom;
+}
+
+.booking-table td {
+  color: rgba(247, 244, 238, 0.84);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.booking-table th:nth-child(1),
+.booking-table td:nth-child(1) {
+  width: 86px;
+}
+
+.booking-table th:nth-child(2),
+.booking-table td:nth-child(2),
+.booking-table th:nth-child(3),
+.booking-table td:nth-child(3),
+.booking-table th:nth-child(5),
+.booking-table td:nth-child(5) {
+  width: 128px;
+}
+
+.booking-table th:nth-child(4),
+.booking-table td:nth-child(4),
+.booking-table th:nth-child(6),
+.booking-table td:nth-child(6),
+.booking-table th:nth-child(7),
+.booking-table td:nth-child(7),
+.booking-table th:nth-child(8),
+.booking-table td:nth-child(8) {
+  width: 150px;
+}
+
+.booking-table th:nth-child(9),
+.booking-table td:nth-child(9),
+.booking-table th:nth-child(10),
+.booking-table td:nth-child(10),
+.booking-table th:nth-child(11),
+.booking-table td:nth-child(11),
+.booking-table th:nth-child(12),
+.booking-table td:nth-child(12),
+.booking-table th:nth-child(13),
+.booking-table td:nth-child(13) {
+  width: 132px;
+}
+
+.booking-table th:nth-child(14),
+.booking-table td:nth-child(14) {
+  width: 140px;
+}
+
+.booking-table th:nth-child(15),
+.booking-table td:nth-child(15) {
+  width: 210px;
+  word-break: normal;
 }
 
 .th-sub {
@@ -1051,9 +1142,11 @@ tbody tr:hover {
   align-items: center;
   border-bottom: 1px solid var(--line);
   display: flex;
+  gap: 10px;
   justify-content: space-between;
   margin-bottom: 14px;
   padding-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .ec-bkno,
@@ -1067,15 +1160,31 @@ tbody tr:hover {
 
 .ec-table {
   min-width: 0;
+  table-layout: fixed;
+  width: 100%;
 }
 
 .ec-table td {
   padding: 10px 0;
+  vertical-align: top;
 }
 
 .ec-table td:first-child {
   color: var(--muted);
   padding-right: 18px;
+  width: 48%;
+}
+
+.ec-table td:last-child {
+  overflow-wrap: anywhere;
+}
+
+.ec-foot {
+  flex-wrap: wrap;
+}
+
+.ec-foot .email-action {
+  flex: 1 1 150px;
 }
 
 .ec-cut {
@@ -1267,6 +1376,14 @@ tbody tr:hover {
   width: min(100%, 720px);
 }
 
+#emailCopyModal .modal-box {
+  background:
+    linear-gradient(180deg, rgba(7, 21, 27, 0.98), rgba(2, 6, 8, 0.98));
+  max-width: 920px;
+  overflow: hidden;
+  width: min(92vw, 920px);
+}
+
 .modal-title {
   align-items: center;
   border-bottom: 1px solid var(--line);
@@ -1317,16 +1434,61 @@ tbody tr:hover {
 }
 
 .plain-preview {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.035);
   border: 1px solid var(--line);
   color: var(--paper);
   max-height: 52vh;
   overflow: auto;
-  padding: 14px;
+  padding: 0;
+  scrollbar-color: rgba(217, 203, 165, 0.55) rgba(255, 255, 255, 0.06);
 }
 
-.plain-preview table {
-  min-width: 680px;
+.modal-preview-table {
+  background: transparent;
+  min-width: min(680px, 100%);
+  table-layout: fixed;
+  width: 100%;
+}
+
+.modal-preview-table thead th {
+  background: rgba(217, 203, 165, 0.11);
+  border-bottom: 1px solid var(--line-strong);
+  color: var(--gold);
+  display: table-cell;
+  font-size: 11px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.modal-preview-table th,
+.modal-preview-table td {
+  border-bottom: 1px solid rgba(247, 244, 238, 0.12);
+  color: rgba(247, 244, 238, 0.88);
+  line-height: 1.45;
+  padding: 13px 16px;
+  white-space: normal;
+}
+
+.modal-preview-table tbody th {
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(247, 244, 238, 0.62);
+  display: table-cell;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  width: 42%;
+}
+
+.modal-preview-table td {
+  color: var(--paper);
+  overflow-wrap: anywhere;
+  width: 58%;
+}
+
+#modalCopyBtn {
+  margin-top: 18px;
+  width: 100%;
 }
 
 .export-column-list {
