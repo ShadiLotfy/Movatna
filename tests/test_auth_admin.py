@@ -232,6 +232,45 @@ class AuthAdminTests(unittest.TestCase):
         self.assertEqual(refreshed_data["kpis"]["activeUsers"], 1)
         self.assertEqual(refreshed_data["kpis"]["disabledDeletedUsers"], 1)
 
+    def test_manual_review_extraction_is_recorded_as_failed_not_success(self):
+        self.admin_login()
+        manual_row = {
+            "Line": "Manual Review",
+            "Booking No.": "",
+            "Equipment": "",
+            "Vessel Name": "",
+            "Voyage No.": "",
+            "Port of Loading": "",
+            "Port of Discharge": "",
+            "Final Dest.": "",
+            "ETS POL / Sailing Date": "",
+            "ETA POD / Arrival Date": "",
+            "SI & VGM Cut Off (Calculated)": "",
+            "Assigning Cut Off (Calculated)": "",
+            "Gate In Cut Off (Calculated)": "",
+            "Client": "",
+            "Comments": "Could not confidently extract this PDF. Please review manually.",
+        }
+
+        with patch.object(self.app_module, "export_booking_data", return_value=[manual_row]):
+            upload = self.client.post(
+                "/api/extract",
+                data={"files": [(BytesIO(b"%PDF-1.4"), "failed.pdf")]},
+                content_type="multipart/form-data",
+            )
+
+        self.assertEqual(upload.status_code, 200, upload.get_data(as_text=True))
+        data = upload.get_json()
+        self.assertEqual(data["summary"], {"processed": 0, "skipped": 0, "failed": 1})
+        self.assertEqual(data["rows"][0]["Line"], "Manual Review")
+        self.assertEqual(data["rows"][0]["Booking No."], "")
+
+        analytics = self.client.get("/api/admin/analytics")
+        self.assertEqual(analytics.status_code, 200, analytics.get_data(as_text=True))
+        analytics_data = analytics.get_json()
+        self.assertEqual(analytics_data["kpis"]["totalUploadsProcessed"], 0)
+        self.assertEqual(analytics_data["recentUploads"][0]["status"], "failed")
+
 
 if __name__ == "__main__":
     unittest.main()

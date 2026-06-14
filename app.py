@@ -857,11 +857,30 @@ def register_routes(app: Flask) -> None:
 
             try:
                 rows = export_booking_data(temp_paths)
-                new_files, new_rows, duplicate_files, duplicate_rows, skipped, display_rows = partition_duplicate_bookings(files, rows)
+                failed_files = []
+                failed_rows = []
+                processable_files = []
+                processable_rows = []
+                for file, row in zip(files, rows):
+                    if str(row.get("Line") or "").strip().lower() == "manual review":
+                        failed_files.append(file)
+                        failed_rows.append(row)
+                    else:
+                        processable_files.append(file)
+                        processable_rows.append(row)
+
+                new_files, new_rows, duplicate_files, duplicate_rows, skipped, processable_display_rows = partition_duplicate_bookings(processable_files, processable_rows)
+                processable_display_iter = iter(processable_display_rows)
+                display_rows = [
+                    row if str(row.get("Line") or "").strip().lower() == "manual review" else next(processable_display_iter)
+                    for row in rows
+                ]
                 if new_files:
                     record_upload_history(user, new_files, new_rows, "success")
                 if duplicate_files:
                     record_upload_history(user, duplicate_files, duplicate_rows, "duplicate")
+                if failed_files:
+                    record_upload_history(user, failed_files, failed_rows, "failed")
                 db.session.commit()
                 return jsonify(
                     {
@@ -869,7 +888,7 @@ def register_routes(app: Flask) -> None:
                         "summary": {
                             "processed": len(new_rows),
                             "skipped": len(skipped),
-                            "failed": 0,
+                            "failed": len(failed_rows),
                         },
                         "skipped": skipped,
                     }

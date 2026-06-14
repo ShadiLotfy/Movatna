@@ -3,8 +3,19 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from booking_extractor import SCHEMA, calculated_cutoffs, clean_port, export_booking_data, format_equipment, parse_booking_pdf
+from pypdf import PdfWriter
+
+from booking_extractor import (
+    SCHEMA,
+    calculated_cutoffs,
+    clean_port,
+    export_booking_data,
+    format_equipment,
+    parse_booking_pdf,
+    read_pdf_text,
+)
 from scripts.accuracy_report import build_report
 
 
@@ -88,6 +99,58 @@ class BookingExtractorTests(unittest.TestCase):
         self.assertTrue(all(row["passed"] for row in rows))
         for stats in field_stats.values():
             self.assertEqual(stats["passed"], stats["total"])
+
+    def test_export_failure_never_uses_pdf_filename_as_booking_number(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "tmpb7jxl77f.pdf"
+            writer = PdfWriter()
+            writer.add_blank_page(width=300, height=300)
+            with path.open("wb") as handle:
+                writer.write(handle)
+
+            with patch("booking_extractor.read_pdf_text_with_ocr", return_value=""):
+                row = export_booking_data([path])[0]
+
+        self.assertEqual(row["Line"], "Manual Review")
+        self.assertEqual(row["Booking No."], "")
+        self.assertIn("Could not confidently extract this PDF", row["Comments"])
+
+    def test_ocr_runs_when_normal_extraction_is_empty(self):
+        ocr_text = read_pdf_text(ROOT / "11.pdf")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "tmpb7jxl77f.pdf"
+            writer = PdfWriter()
+            writer.add_blank_page(width=300, height=300)
+            with path.open("wb") as handle:
+                writer.write(handle)
+            with patch("booking_extractor.read_pdf_text", return_value=""), patch(
+                "booking_extractor.read_pdf_text_pymupdf", return_value=""
+            ), patch("booking_extractor.read_pdf_text_pdfplumber", return_value=""), patch(
+                "booking_extractor.read_pdf_text_with_ocr", return_value=ocr_text
+            ) as ocr:
+                row = parse_booking_pdf(path)
+
+        self.assertTrue(ocr.called)
+        self.assertEqual(row["Booking No."], EXPECTED["11.pdf"]["Booking No."])
+
+    def test_missing_required_fields_retry_with_alternate_text_method(self):
+        valid_text = read_pdf_text(ROOT / "11.pdf")
+        weak_text = "CMA CGM Booking Number: CFA1234567"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = Path(tmpdir) / "tmpb7jxl77f.pdf"
+            writer = PdfWriter()
+            writer.add_blank_page(width=300, height=300)
+            with path.open("wb") as handle:
+                writer.write(handle)
+            with patch("booking_extractor.read_pdf_text", return_value=weak_text), patch(
+                "booking_extractor.read_pdf_text_pymupdf", return_value=valid_text
+            ), patch("booking_extractor.read_pdf_text_pdfplumber", return_value=""), patch(
+                "booking_extractor.read_pdf_text_with_ocr", return_value=""
+            ):
+                row = parse_booking_pdf(path)
+
+        self.assertEqual(row["Line"], "COSCO")
+        self.assertEqual(row["Booking No."], EXPECTED["11.pdf"]["Booking No."])
 
     def test_equipment_normalization_handles_template_variants(self):
         examples = {

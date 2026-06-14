@@ -80,6 +80,10 @@ class ExtractionValidationError(ValueError):
     """Raised when a parser returns a structurally invalid booking row."""
 
 
+class ManualReviewRequired(ExtractionValidationError):
+    """Raised when every extraction method fails confidence checks."""
+
+
 def compact_len(text: str) -> int:
     return len(re.sub(r"\s+", "", text or ""))
 
@@ -103,6 +107,38 @@ def read_pdf_text_pymupdf(path: str | Path) -> str:
     return "\n".join(chunks)
 
 
+def read_pdf_text_pdfplumber(path: str | Path) -> str:
+    try:
+        import pdfplumber
+    except ImportError:
+        return ""
+
+    chunks: list[str] = []
+    try:
+        with pdfplumber.open(str(path)) as pdf:
+            for page in pdf.pages:
+                text = page.extract_text(x_tolerance=1, y_tolerance=3) or ""
+                tables = page.extract_tables() or []
+                table_text = "\n".join(
+                    " | ".join("" if cell is None else str(cell) for cell in row)
+                    for table in tables
+                    for row in table
+                )
+                chunks.append("\n".join(part for part in [text, table_text] if part))
+    except Exception as exc:
+        logger.warning("pdfplumber extraction failed for %s: %s", path, exc)
+        return ""
+    return "\n".join(chunks)
+
+
+def preprocess_ocr_image(image):
+    from PIL import ImageOps
+
+    grayscale = ImageOps.grayscale(image)
+    enhanced = ImageOps.autocontrast(grayscale)
+    return enhanced.point(lambda pixel: 255 if pixel > 170 else 0, mode="1")
+
+
 def read_pdf_text_with_ocr(path: str | Path) -> str:
     try:
         import fitz  # PyMuPDF
@@ -118,7 +154,11 @@ def read_pdf_text_with_ocr(path: str | Path) -> str:
             for page in doc:
                 pix = page.get_pixmap(matrix=fitz.Matrix(2.5, 2.5), alpha=False)
                 image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-                chunks.append(pytesseract.image_to_string(image, config="--psm 6"))
+                processed = preprocess_ocr_image(image)
+                text = pytesseract.image_to_string(processed, config="--psm 6")
+                if compact_len(text) < 40:
+                    text = pytesseract.image_to_string(processed, config="--psm 11")
+                chunks.append(text)
     except Exception as exc:
         logger.warning("OCR fallback failed for %s: %s", path, exc)
         return ""
@@ -126,42 +166,59 @@ def read_pdf_text_with_ocr(path: str | Path) -> str:
 
 
 def extract_pdf_document(path: str | Path) -> ExtractedDocument:
+    documents = extract_pdf_documents(path, include_ocr=True)
+    return max(documents or [ExtractedDocument("", "none")], key=lambda doc: compact_len(doc.text))
+
+
+def extract_pdf_documents(path: str | Path, *, include_ocr: bool = False) -> list[ExtractedDocument]:
     path = Path(path)
-    warnings: list[str] = []
     page_count = 0
+    shared_warnings: list[str] = []
     try:
         page_count = len(PdfReader(str(path)).pages)
     except Exception as exc:
-        warnings.append(f"Could not count pages with pypdf: {exc}")
+        shared_warnings.append(f"Could not count pages with pypdf: {exc}")
 
-    candidates: list[tuple[str, str]] = []
+    documents: list[ExtractedDocument] = []
     try:
-        candidates.append(("pypdf", read_pdf_text(path)))
+        documents.append(
+            ExtractedDocument(
+                text=read_pdf_text(path),
+                method="pypdf",
+                page_count=page_count,
+                char_count=0,
+                warnings=list(shared_warnings),
+            )
+        )
     except Exception as exc:
-        warnings.append(f"pypdf failed: {exc}")
+        shared_warnings.append(f"pypdf failed: {exc}")
 
     pymupdf_text = read_pdf_text_pymupdf(path)
     if pymupdf_text:
-        candidates.append(("pymupdf", pymupdf_text))
+        documents.append(ExtractedDocument(pymupdf_text, "pymupdf", page_count, len(pymupdf_text), list(shared_warnings)))
 
-    best_method, best_text = max(candidates or [("none", "")], key=lambda item: compact_len(item[1]))
-    if compact_len(best_text) < 120:
+    pdfplumber_text = read_pdf_text_pdfplumber(path)
+    if pdfplumber_text:
+        documents.append(ExtractedDocument(pdfplumber_text, "pdfplumber", page_count, len(pdfplumber_text), list(shared_warnings)))
+
+    for document in documents:
+        document.char_count = len(document.text or "")
+
+    best_text = max((doc.text for doc in documents), key=compact_len, default="")
+    if include_ocr and compact_len(best_text) < 120:
         ocr_text = read_pdf_text_with_ocr(path)
         if compact_len(ocr_text) > compact_len(best_text):
-            best_method, best_text = "ocr-pytesseract", ocr_text
+            documents.append(ExtractedDocument(ocr_text, "ocr-pytesseract", page_count, len(ocr_text), list(shared_warnings)))
         elif not ocr_text:
-            warnings.append("Text extraction produced too little text and OCR was unavailable or failed")
+            shared_warnings.append("Text extraction produced too little text and OCR was unavailable or failed")
 
-    if page_count and compact_len(best_text) < 40:
-        warnings.append("PDF appears scanned, blank, encrypted, or otherwise unreadable")
+    if not documents:
+        documents.append(ExtractedDocument("", "none", page_count, 0, list(shared_warnings)))
 
-    return ExtractedDocument(
-        text=best_text,
-        method=best_method,
-        page_count=page_count,
-        char_count=len(best_text or ""),
-        warnings=warnings,
-    )
+    for document in documents:
+        if page_count and compact_len(document.text) < 40:
+            document.warnings.append("PDF appears scanned, blank, encrypted, or otherwise unreadable")
+    return documents
 
 
 def read_pdf_text_with_optional_ocr(path: str | Path) -> str:
@@ -432,7 +489,11 @@ def normalize_line_name(value: str) -> str:
     return aliases.get(key, value or "")
 
 
-def record_validation_warnings(record: dict[str, str]) -> list[str]:
+def looks_like_pdf_filename(value: str) -> bool:
+    return bool(re.fullmatch(r"[^\\/]+\.pdf", (value or "").strip(), flags=re.I))
+
+
+def record_validation_warnings(record: dict[str, str], *, source_path: str | Path | None = None) -> list[str]:
     warnings: list[str] = []
     missing = [field for field in CRITICAL_FIELDS if not str(record.get(field, "")).strip()]
     if missing:
@@ -440,6 +501,10 @@ def record_validation_warnings(record: dict[str, str]) -> list[str]:
 
     booking = str(record.get("Booking No.", "")).strip()
     line = str(record.get("Line", "")).strip()
+    if looks_like_pdf_filename(booking):
+        warnings.append(f"Booking number is a PDF filename, not extracted content: {booking}")
+    if source_path and booking and booking.lower() == Path(source_path).name.lower():
+        warnings.append(f"Booking number equals source filename: {booking}")
     if booking and not re.fullmatch(r"[A-Z0-9-]{5,}", booking, flags=re.I):
         warnings.append(f"Suspicious booking number: {booking}")
     if re.search(r"cosco", line, flags=re.I) and booking and not re.fullmatch(r"\d{8,12}", booking):
@@ -472,11 +537,24 @@ def record_validation_warnings(record: dict[str, str]) -> list[str]:
     return warnings
 
 
-def validate_record(record: dict[str, str], *, source: str = "") -> list[str]:
-    warnings = record_validation_warnings(record)
-    for warning in warnings:
-        logger.warning("%s%s", f"{source}: " if source else "", warning)
-    fatal = [warning for warning in warnings if warning.startswith("Missing required fields")]
+def validate_record(
+    record: dict[str, str],
+    *,
+    source: str = "",
+    source_path: str | Path | None = None,
+    emit_warnings: bool = True,
+) -> list[str]:
+    warnings = record_validation_warnings(record, source_path=source_path)
+    if emit_warnings:
+        for warning in warnings:
+            logger.warning("%s%s", f"{source}: " if source else "", warning)
+    fatal = [
+        warning
+        for warning in warnings
+        if warning.startswith("Missing required fields")
+        or "PDF filename" in warning
+        or "equals source filename" in warning
+    ]
     if fatal:
         raise ExtractionValidationError("; ".join(fatal))
     return warnings
@@ -794,11 +872,43 @@ PARSERS = {
 
 def parse_booking_pdf(path: str | Path) -> dict[str, str]:
     path = Path(path)
-    document = extract_pdf_document(path)
-    line = detect_line(document.text)
-    parser = PARSERS.get(line, parse_shipping_order)
-    row = parser(document.text)
-    validate_record(row, source=f"{path.name} ({document.method})")
+    documents = extract_pdf_documents(path, include_ocr=False)
+    attempts: list[str] = []
+    tried_ocr = False
+
+    while True:
+        for document in sorted(documents, key=lambda doc: compact_len(doc.text), reverse=True):
+            if not document.text or compact_len(document.text) < 20:
+                attempts.append(f"{document.method}: empty or weak text")
+                continue
+            try:
+                line = detect_line(document.text)
+                parser = PARSERS.get(line, parse_shipping_order)
+                row = parser(document.text)
+                validate_record(row, source=f"{path.name} ({document.method})", source_path=path, emit_warnings=False)
+                return row
+            except Exception as exc:
+                attempts.append(f"{document.method}: {exc}")
+
+        if tried_ocr:
+            break
+        tried_ocr = True
+        ocr_text = read_pdf_text_with_ocr(path)
+        if compact_len(ocr_text) <= max((compact_len(doc.text) for doc in documents), default=0):
+            attempts.append("ocr-pytesseract: unavailable, weak, or no improvement")
+        else:
+            documents.append(ExtractedDocument(ocr_text, "ocr-pytesseract", char_count=len(ocr_text)))
+
+    detail = "; ".join(attempts[-6:]) or "No readable PDF text"
+    raise ManualReviewRequired(f"Could not confidently extract this PDF. Please review manually. {detail}")
+
+
+def manual_review_row(message: str) -> dict[str, str]:
+    row = {key: "" for key in SCHEMA}
+    row["Line"] = "Manual Review"
+    row["Comments"] = "Could not confidently extract this PDF. Please review manually."
+    if message:
+        row["Final Dest."] = re.sub(r"\s+", " ", message).strip()[:240]
     return row
 
 
@@ -819,11 +929,8 @@ def export_booking_data(pdf_paths_list: Sequence[str | Path], as_dataframe: bool
             row = parse_booking_pdf(pdf_path)
             rows.append({key: row.get(key, "") for key in SCHEMA})
         except Exception as exc:
-            error_row = {key: "" for key in SCHEMA}
-            error_row["Line"] = "Parse Error"
-            error_row["Booking No."] = Path(pdf_path).name
-            error_row["Final Dest."] = str(exc)
-            rows.append(error_row)
+            logger.warning("Manual review required for %s: %s", pdf_path, exc)
+            rows.append(manual_review_row(str(exc)))
 
     if as_dataframe:
         try:
@@ -838,7 +945,19 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("pdfs", nargs="+", help="PDF files to parse")
     parser.add_argument("--dataframe", action="store_true", help="Print DataFrame records JSON if pandas is available")
+    parser.add_argument("--debug-text", action="store_true", help="Print raw text from each extraction method")
     args = parser.parse_args()
+
+    if args.debug_text:
+        for pdf_path in args.pdfs:
+            print(f"===== {pdf_path} =====")
+            documents = extract_pdf_documents(pdf_path, include_ocr=True)
+            for document in documents:
+                print(f"----- {document.method} chars={document.char_count} compact={compact_len(document.text)} -----")
+                print(document.text or "")
+                for warning in document.warnings:
+                    print(f"[warning] {warning}")
+        return 0
 
     result = export_booking_data(args.pdfs, as_dataframe=args.dataframe)
     if args.dataframe:
