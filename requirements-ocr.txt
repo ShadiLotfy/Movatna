@@ -1,0 +1,4 @@
+PyMuPDF==1.24.9
+pdfplumber==0.11.4
+Pillow==10.4.0
+pytesseract==0.3.13
