@@ -857,9 +857,6 @@ def register_routes(app: Flask) -> None:
 
             try:
                 rows = export_booking_data(temp_paths)
-                for row, source in zip(rows, files):
-                    if (source.filename or "").lower() == "latt trading.pdf":
-                        row["Line"] = "LATT"
                 new_files, new_rows, duplicate_files, duplicate_rows, skipped, display_rows = partition_duplicate_bookings(files, rows)
                 if new_files:
                     record_upload_history(user, new_files, new_rows, "success")

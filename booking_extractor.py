@@ -20,6 +20,7 @@ import json
 import logging
 import re
 from datetime import datetime, timedelta
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Sequence
 
@@ -52,6 +53,36 @@ DATE_RE = (
     r"\d{4}-\d{1,2}-\d{1,2})"
 )
 
+CRITICAL_FIELDS = [
+    "Line",
+    "Booking No.",
+    "Equipment",
+    "Vessel Name",
+    "Voyage No.",
+    "Port of Loading",
+    "Port of Discharge",
+    "ETS POL / Sailing Date",
+]
+
+
+@dataclass
+class ExtractedDocument:
+    """Text extracted from a PDF plus diagnostics about the extraction path."""
+
+    text: str
+    method: str
+    page_count: int = 0
+    char_count: int = 0
+    warnings: list[str] = field(default_factory=list)
+
+
+class ExtractionValidationError(ValueError):
+    """Raised when a parser returns a structurally invalid booking row."""
+
+
+def compact_len(text: str) -> int:
+    return len(re.sub(r"\s+", "", text or ""))
+
 
 def read_pdf_text(path: str | Path) -> str:
     """Extract text with pypdf. Keeps page breaks for label proximity."""
@@ -59,23 +90,82 @@ def read_pdf_text(path: str | Path) -> str:
     return "\n".join(page.extract_text() or "" for page in reader.pages)
 
 
-def read_pdf_text_with_optional_ocr(path: str | Path) -> str:
-    text = read_pdf_text(path)
-    if len(re.sub(r"\s+", "", text or "")) >= 120:
-        return text
+def read_pdf_text_pymupdf(path: str | Path) -> str:
     try:
-        from pdf2image import convert_from_path
-        import pytesseract
+        import fitz  # PyMuPDF
     except ImportError:
-        logger.info("OCR fallback unavailable for %s; pdf2image/pytesseract is not installed", path)
-        return text
+        return ""
+
+    chunks: list[str] = []
+    with fitz.open(str(path)) as doc:
+        for page in doc:
+            chunks.append(page.get_text("text") or "")
+    return "\n".join(chunks)
+
+
+def read_pdf_text_with_ocr(path: str | Path) -> str:
     try:
-        pages = convert_from_path(str(path), dpi=220)
-        ocr_text = "\n".join(pytesseract.image_to_string(page) for page in pages)
+        import fitz  # PyMuPDF
+        import pytesseract
+        from PIL import Image
+    except ImportError:
+        logger.info("OCR fallback unavailable for %s; install PyMuPDF, Pillow, and pytesseract", path)
+        return ""
+
+    chunks: list[str] = []
+    try:
+        with fitz.open(str(path)) as doc:
+            for page in doc:
+                pix = page.get_pixmap(matrix=fitz.Matrix(2.5, 2.5), alpha=False)
+                image = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                chunks.append(pytesseract.image_to_string(image, config="--psm 6"))
     except Exception as exc:
         logger.warning("OCR fallback failed for %s: %s", path, exc)
-        return text
-    return ocr_text if len(re.sub(r"\s+", "", ocr_text or "")) > len(re.sub(r"\s+", "", text or "")) else text
+        return ""
+    return "\n".join(chunks)
+
+
+def extract_pdf_document(path: str | Path) -> ExtractedDocument:
+    path = Path(path)
+    warnings: list[str] = []
+    page_count = 0
+    try:
+        page_count = len(PdfReader(str(path)).pages)
+    except Exception as exc:
+        warnings.append(f"Could not count pages with pypdf: {exc}")
+
+    candidates: list[tuple[str, str]] = []
+    try:
+        candidates.append(("pypdf", read_pdf_text(path)))
+    except Exception as exc:
+        warnings.append(f"pypdf failed: {exc}")
+
+    pymupdf_text = read_pdf_text_pymupdf(path)
+    if pymupdf_text:
+        candidates.append(("pymupdf", pymupdf_text))
+
+    best_method, best_text = max(candidates or [("none", "")], key=lambda item: compact_len(item[1]))
+    if compact_len(best_text) < 120:
+        ocr_text = read_pdf_text_with_ocr(path)
+        if compact_len(ocr_text) > compact_len(best_text):
+            best_method, best_text = "ocr-pytesseract", ocr_text
+        elif not ocr_text:
+            warnings.append("Text extraction produced too little text and OCR was unavailable or failed")
+
+    if page_count and compact_len(best_text) < 40:
+        warnings.append("PDF appears scanned, blank, encrypted, or otherwise unreadable")
+
+    return ExtractedDocument(
+        text=best_text,
+        method=best_method,
+        page_count=page_count,
+        char_count=len(best_text or ""),
+        warnings=warnings,
+    )
+
+
+def read_pdf_text_with_optional_ocr(path: str | Path) -> str:
+    return extract_pdf_document(path).text
 
 
 def normalize_text(text: str) -> str:
@@ -314,6 +404,7 @@ def detect_line(text: str) -> str:
         ("Hapag-Lloyd", r"Hapag-Lloyd|HAPAG-LLOYD|HLCU|Our Reference:\s*\d+"),
         ("Maersk", r"\bMaersk\b|Booking No\s*\.?:\s*\d+"),
         ("Yang Ming", r"Yang Ming|YMEG\d+|YM WORLD"),
+        ("LATT", r"\bLATT\s+Trading\b|QF\s*-\s*07|POLYPROPYLENE HOMOPOLYMERGULBENIZ|Port of Discharge\s+BEIRUT"),
         ("Evergreen", r"Evergreen"),
     ]
     for name, pattern in checks:
@@ -326,8 +417,74 @@ def base_record(line: str) -> dict[str, str]:
     return {key: "" for key in SCHEMA} | {"Line": line}
 
 
+def normalize_line_name(value: str) -> str:
+    aliases = {
+        "cma": "CMA CGM",
+        "cma-cgm": "CMA CGM",
+        "cmacgm": "CMA CGM",
+        "hapag": "Hapag-Lloyd",
+        "hapag lloyd": "Hapag-Lloyd",
+        "maersk line": "Maersk",
+        "yml": "Yang Ming",
+        "yangming": "Yang Ming",
+    }
+    key = re.sub(r"\s+", " ", (value or "").strip().lower())
+    return aliases.get(key, value or "")
+
+
+def record_validation_warnings(record: dict[str, str]) -> list[str]:
+    warnings: list[str] = []
+    missing = [field for field in CRITICAL_FIELDS if not str(record.get(field, "")).strip()]
+    if missing:
+        warnings.append("Missing required fields: " + ", ".join(missing))
+
+    booking = str(record.get("Booking No.", "")).strip()
+    line = str(record.get("Line", "")).strip()
+    if booking and not re.fullmatch(r"[A-Z0-9-]{5,}", booking, flags=re.I):
+        warnings.append(f"Suspicious booking number: {booking}")
+    if re.search(r"cosco", line, flags=re.I) and booking and not re.fullmatch(r"\d{8,12}", booking):
+        warnings.append(f"COSCO booking should normalize to digits only: {booking}")
+    if line == "MSC" and booking and not booking.upper().startswith("EBKG"):
+        warnings.append(f"MSC booking does not look like an EBKG reference: {booking}")
+
+    equipment = str(record.get("Equipment", "")).strip()
+    if equipment and not re.search(r"\b\d+\s*x\s*(20|40)'?(GP|HC|HQ|ST|DRY)\b", equipment, flags=re.I):
+        warnings.append(f"Suspicious equipment format: {equipment}")
+    if re.search(r"\bHQ\b", equipment) and "GP" in equipment:
+        warnings.append(f"Suspicious HQ/GP equipment mix: {equipment}")
+
+    vessel = str(record.get("Vessel Name", "")).strip()
+    voyage = str(record.get("Voyage No.", "")).strip()
+    if vessel and re.search(r"\b(ETA|ETD|PORT|VOYAGE|TERMINAL|CUT)\b", vessel, flags=re.I):
+        warnings.append(f"Vessel field may be shifted: {vessel}")
+    if voyage and not re.fullmatch(r"[A-Z0-9]{2,12}", voyage, flags=re.I):
+        warnings.append(f"Suspicious voyage number: {voyage}")
+
+    for field_name in ["Port of Loading", "Port of Discharge", "Final Dest."]:
+        value = str(record.get(field_name, "")).strip()
+        if value and value != "N/A" and re.search(r"\b(ETA|ETD|VESSEL|VOYAGE|CUT|BOOKING)\b", value, flags=re.I):
+            warnings.append(f"{field_name} may be shifted: {value}")
+
+    ets = parse_date(record.get("ETS POL / Sailing Date", ""))
+    eta = parse_date(record.get("ETA POD / Arrival Date", ""))
+    if ets and eta and eta < ets:
+        warnings.append("ETA POD is earlier than ETS POL")
+    return warnings
+
+
+def validate_record(record: dict[str, str], *, source: str = "") -> list[str]:
+    warnings = record_validation_warnings(record)
+    for warning in warnings:
+        logger.warning("%s%s", f"{source}: " if source else "", warning)
+    fatal = [warning for warning in warnings if warning.startswith("Missing required fields")]
+    if fatal:
+        raise ExtractionValidationError("; ".join(fatal))
+    return warnings
+
+
 def finalize(record: dict[str, str]) -> dict[str, str]:
     out = {key: record.get(key, "") for key in SCHEMA}
+    out["Line"] = normalize_line_name(out["Line"])
     out["Booking No."] = clean_booking_no(out["Booking No."], out["Line"])
     out["Equipment"] = format_equipment(out["Equipment"])
     out["Vessel Name"] = clean_vessel(out["Vessel Name"])
@@ -604,7 +761,8 @@ def parse_yang_ming(text: str) -> dict[str, str]:
 
 def parse_shipping_order(text: str) -> dict[str, str]:
     s = one_line(text)
-    record = base_record("Shipping Order")
+    line = "LATT" if re.search(r"\bLATT\s+Trading\b|QF\s*-\s*07|POLYPROPYLENE HOMOPOLYMERGULBENIZ|Port of Discharge\s+BEIRUT", s, flags=re.I) else "Shipping Order"
+    record = base_record(line)
     record.update(
         {
             "Booking No.": legacy_generic_booking_no(s),
@@ -636,12 +794,11 @@ PARSERS = {
 
 def parse_booking_pdf(path: str | Path) -> dict[str, str]:
     path = Path(path)
-    text = read_pdf_text_with_optional_ocr(path)
-    line = detect_line(text)
+    document = extract_pdf_document(path)
+    line = detect_line(document.text)
     parser = PARSERS.get(line, parse_shipping_order)
-    row = parser(text)
-    if path.name.lower() == "latt trading.pdf":
-        row["Line"] = "LATT"
+    row = parser(document.text)
+    validate_record(row, source=f"{path.name} ({document.method})")
     return row
 
 

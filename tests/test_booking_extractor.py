@@ -1,8 +1,11 @@
 import json
+import shutil
+import tempfile
 import unittest
 from pathlib import Path
 
 from booking_extractor import SCHEMA, calculated_cutoffs, clean_port, export_booking_data, format_equipment, parse_booking_pdf
+from scripts.accuracy_report import build_report
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -68,6 +71,23 @@ class BookingExtractorTests(unittest.TestCase):
         self.assertEqual(len(rows), len(EXPECTED))
         for row in rows:
             self.assertEqual(list(row), SCHEMA)
+
+    def test_latt_template_is_detected_from_pdf_content_not_filename(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            renamed = Path(tmpdir) / "shipping-order-sample.pdf"
+            shutil.copyfile(ROOT / "LATT Trading.pdf", renamed)
+
+            row = parse_booking_pdf(renamed)
+
+        self.assertEqual(row["Line"], "LATT")
+        self.assertEqual(row["Booking No."], EXPECTED["LATT Trading.pdf"]["Booking No."])
+
+    def test_accuracy_report_all_samples_pass(self):
+        rows, field_stats = build_report(EXPECTED)
+
+        self.assertTrue(all(row["passed"] for row in rows))
+        for stats in field_stats.values():
+            self.assertEqual(stats["passed"], stats["total"])
 
     def test_equipment_normalization_handles_template_variants(self):
         examples = {
